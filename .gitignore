@@ -11,3 +11,6 @@ wheels/
 
 # Nextflow
 nextflow/
+work/
+.nextflow/
+.nextflow.log*
