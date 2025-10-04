@@ -3,9 +3,6 @@
 process sayHello {
     debug true
 
-    output:
-    stdout
-
     script:
     """
     echo 'Hello world from Python!'
