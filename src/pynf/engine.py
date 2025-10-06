@@ -21,6 +21,12 @@ class NextflowEngine:
         # Create session with config
         session = self.Session()
 
+        # Initialize session with script file
+        from java.util import ArrayList
+        ScriptFile = jpype.JClass("nextflow.script.ScriptFile")
+        script_file = ScriptFile(jpype.java.nio.file.Paths.get(str(script_path)))
+        session.init(script_file, ArrayList(), None, None)
+
         # Set parameters if provided
         if params:
             for key, value in params.items():
@@ -34,9 +40,15 @@ class NextflowEngine:
         # Use ScriptLoaderV2 with module support for raw modules
         loader = self.ScriptLoaderFactory.create(session)
         java_path = jpype.java.nio.file.Paths.get(str(script_path))
-        loader.setModule(True)
+        loader.setModule(True)  # Enable module mode for raw modules
         loader.parse(java_path)
+
+        # Capture script before execution
+        script = loader.getScript()
         loader.runScript()
 
+        # Wait for execution to complete
+        session.await_()
+
         from .result import NextflowResult
-        return NextflowResult(None, session)
+        return NextflowResult(script, session, loader)
