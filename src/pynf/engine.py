@@ -9,12 +9,12 @@ class NextflowEngine:
             jpype.startJVM(classpath=[nextflow_jar_path])
 
         # Import Nextflow classes after JVM is started
-        self.ScriptRunner = jpype.JClass("nextflow.script.ScriptRunner")
+        self.ScriptLoaderFactory = jpype.JClass("nextflow.script.ScriptLoaderFactory")
         self.Session = jpype.JClass("nextflow.Session")
         self.Channel = jpype.JClass("nextflow.Channel")
 
     def load_script(self, nf_file_path):
-        # Return the Path object for setScript
+        # Return the Path object for script loading
         return Path(nf_file_path)
 
     def execute(self, script_path, executor="local", params=None, input_files=None, config=None):
@@ -31,11 +31,12 @@ class NextflowEngine:
             input_channel = self.Channel.of(*input_files)
             session.getBinding().setVariable("input", input_channel)
 
-        # Execute script using Java Path
-        runner = self.ScriptRunner(session)
+        # Use ScriptLoaderV2 with module support for raw modules
+        loader = self.ScriptLoaderFactory.create(session)
         java_path = jpype.java.nio.file.Paths.get(str(script_path))
-        runner.setScript(java_path)
-        result = runner.execute()
+        loader.setModule(True)
+        loader.parse(java_path)
+        loader.runScript()
 
         from .result import NextflowResult
-        return NextflowResult(result, session)
+        return NextflowResult(None, session)
