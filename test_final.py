@@ -4,7 +4,7 @@
 Final comprehensive test for py-nf package
 """
 
-from py_nf import NextflowEngine, run_workflow
+from pynf import NextflowEngine, run_workflow
 
 def test_comprehensive():
     """Test comprehensive functionality"""

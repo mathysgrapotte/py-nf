@@ -5,7 +5,7 @@ Integration test for py-nf package
 Tests running a simple Nextflow script from Python
 """
 
-from py_nf import NextflowEngine, run_workflow
+from pynf import NextflowEngine, run_workflow
 
 def test_basic_engine():
     """Test basic NextflowEngine functionality"""
