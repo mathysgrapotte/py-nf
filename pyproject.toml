@@ -1,5 +1,5 @@
 [project]
-name = "py-nf"
+name = "pynf"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -7,3 +7,13 @@ requires-python = ">=3.12"
 dependencies = [
     "jpype1>=1.6.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["src/pynf"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pynf"]
