@@ -1,6 +1,11 @@
+import os
 import jpype
 import jpype.imports
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class _WorkflowOutputCollector:
@@ -9,6 +14,7 @@ class _WorkflowOutputCollector:
     def __init__(self):
         self._workflow_events = []
         self._file_events = []
+        self._task_workdirs = []
 
     # --- TraceObserverV2 hooks (no-ops unless otherwise noted) ---
     def onFlowCreate(self, session):  # noqa: D401 - required signature
@@ -36,10 +42,32 @@ class _WorkflowOutputCollector:
         return None
 
     def onTaskComplete(self, event):
-        return None
+        print(f"DEBUG: onTaskComplete called")
+        try:
+            # Use getHandler() method instead of .handler attribute
+            handler = event.getHandler()
+            task = handler.getTask()
+            workdir = str(task.getWorkDir())
+            print(f"DEBUG: Task workDir: {workdir}")
+            self._task_workdirs.append(workdir)
+        except Exception as e:
+            print(f"DEBUG: Error getting workDir: {e}")
+            import traceback
+            traceback.print_exc()
 
     def onTaskCached(self, event):
-        return None
+        print(f"DEBUG: onTaskCached called")
+        try:
+            # Use getHandler() method instead of .handler attribute
+            handler = event.getHandler()
+            task = handler.getTask()
+            workdir = str(task.getWorkDir())
+            print(f"DEBUG: Task workDir: {workdir}")
+            self._task_workdirs.append(workdir)
+        except Exception as e:
+            print(f"DEBUG: Error getting workDir: {e}")
+            import traceback
+            traceback.print_exc()
 
     def onFlowError(self, event):
         return None
@@ -69,9 +97,19 @@ class _WorkflowOutputCollector:
     def file_events(self):
         return list(self._file_events)
 
+    def task_workdirs(self):
+        return list(self._task_workdirs)
+
 
 class NextflowEngine:
-    def __init__(self, nextflow_jar_path="nextflow/modules/nextflow/build/libs/nextflow-25.08.0-edge-one.jar"):
+    def __init__(self, nextflow_jar_path=None):
+        # Use provided path, or environment variable, or default
+        if nextflow_jar_path is None:
+            nextflow_jar_path = os.getenv(
+                "NEXTFLOW_JAR_PATH",
+                "nextflow/modules/nextflow/build/libs/nextflow-25.10.0-one.jar"
+            )
+
         # Start JVM with Nextflow classpath
         if not jpype.isJVMStarted():
             jpype.startJVM(classpath=[nextflow_jar_path])
@@ -115,17 +153,19 @@ class NextflowEngine:
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
         observer_registered = self._register_output_observer(session, observer_proxy)
+        print(f"DEBUG: Observer registered: {observer_registered}")
 
         # Capture script before execution
         script = loader.getScript()
         try:
             loader.runScript()
             session.fireDataflowNetwork(False)
-            # Wait for execution to complete
             session.await_()
+            print(f"DEBUG: After await, collected {len(collector.task_workdirs())} workdirs")
         finally:
             if observer_registered:
                 self._unregister_output_observer(session, observer_proxy)
+            session.destroy()
 
         from .result import NextflowResult
         return NextflowResult(
@@ -134,6 +174,7 @@ class NextflowEngine:
             loader,
             workflow_events=collector.workflow_events(),
             file_events=collector.file_events(),
+            task_workdirs=collector.task_workdirs(),
         )
 
     # ------------------------------------------------------------------

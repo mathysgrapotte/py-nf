@@ -10,18 +10,26 @@ def _java_class(name):
 
 
 class NextflowResult:
-    def __init__(self, script, session, loader, workflow_events=None, file_events=None):
+    def __init__(self, script, session, loader, workflow_events=None, file_events=None, task_workdirs=None):
         self.script = script
         self.session = session
         self.loader = loader
         self._workflow_events = workflow_events or []
         self._file_events = file_events or []
+        self._task_workdirs = task_workdirs or []
 
     def get_output_files(self):
         """Get output file paths, preferring published metadata when available."""
         paths = self._collect_paths_from_observer()
+
+        # DEBUG
+        print(f"DEBUG: Observer paths: {paths}")
+        print(f"DEBUG: task_workdirs: {self._task_workdirs}")
+
         if not paths:
             paths = self._collect_paths_from_workdir()
+            print(f"DEBUG: Workdir scan paths: {paths}")
+
         return paths
 
     def _collect_paths_from_observer(self):
@@ -133,28 +141,27 @@ class NextflowResult:
         yield from visit(value)
 
     def _collect_paths_from_workdir(self):
-        """Fallback to work directory traversal (legacy behaviour)."""
-        work_dir_path = self.session.getWorkDir()
-        if not work_dir_path:
-            return []
-        work_dir = work_dir_path.toFile()
-        if not work_dir.exists():
-            return []
+        """Fallback to work directory traversal (only scans tracked task workDirs)."""
+        from pathlib import Path as _PyPath
 
         outputs = []
+        print(f"DEBUG: Scanning {len(self._task_workdirs)} workdirs")
 
-        # Look through task directories to find actual output files
-        for task_dir in work_dir.listFiles():
-            if not task_dir.isDirectory():
-                continue
-            for subdir in task_dir.listFiles():
-                if not subdir.isDirectory():
-                    continue
-                for file in subdir.listFiles():
-                    if file.isFile() and not file.getName().startsWith('.'):
-                        path_str = str(file.getAbsolutePath())
-                        if path_str not in outputs:
-                            outputs.append(path_str)
+        # Use tracked workDirs from current run if available
+        for workdir_str in self._task_workdirs:
+            workdir = _PyPath(workdir_str)
+            print(f"DEBUG: Scanning workdir: {workdir}")
+            print(f"DEBUG: Workdir exists: {workdir.exists()}")
+
+            if workdir.exists():
+                files = list(workdir.iterdir())
+                print(f"DEBUG: Files in workdir: {files}")
+
+            for file in workdir.iterdir():
+                if file.is_file() and not file.name.startswith('.'):
+                    path_str = str(file.absolute())
+                    if path_str not in outputs:
+                        outputs.append(path_str)
 
         return outputs
 
@@ -226,16 +233,19 @@ class NextflowResult:
 
     def get_stdout(self):
         """Get stdout from processes"""
-        work_dir = self.session.getWorkDir()
-        for task_dir in work_dir.listFiles():
-            stdout_file = task_dir.toPath().resolve(".command.out")
-            return stdout_file.toFile().getText()
+        Files = _java_class("java.nio.file.Files")
+        work_dir = self.session.getWorkDir().toFile()
+        for hash_prefix in work_dir.listFiles():
+            for task_dir in hash_prefix.listFiles():
+                stdout_path = task_dir.toPath().resolve(".command.out")
+                return str(Files.readString(stdout_path))
         return ""
 
     def get_execution_report(self):
         """Get execution statistics"""
+        stats = self.session.getStatsObserver().getStats()
         return {
-            'completed_tasks': self.session.getCompletedCount(),
-            'failed_tasks': self.session.getFailedCount(),
+            'completed_tasks': stats.getSucceededCount(),
+            'failed_tasks': stats.getFailedCount(),
             'work_dir': str(self.session.getWorkDir())
         }
