@@ -16,11 +16,34 @@ Behind that one-liner the library:
 ## Prerequisites
 
 * Python 3.12+ (managed via [uv](https://docs.astral.sh/uv/) in this repo).
-* A locally built Nextflow distribution; this project expects the jar at `nextflow/modules/nextflow/build/libs/nextflow-25.08.0-edge-one.jar` (the Gradle build in the nested `nextflow/` directory produces it).
+* Java 17+ (required to build Nextflow)
+* Git and Make (for cloning and building Nextflow)
 * Nextflow scripts placed under `nextflow_scripts/`. The repo ships a few simple examples:
 	* `nextflow_scripts/hello-world.nf` – DSL2 script with a workflow block.
 	* `nextflow_scripts/simple-process.nf` – raw module (single `process`) without a `workflow {}` block.
 	* `nextflow_scripts/file-output-process.nf` – raw module that publishes `output.txt` and is used in the tests below.
+
+
+## Nextflow Setup
+
+This project requires a locally built Nextflow fat JAR. An automated setup script handles this for you:
+
+```bash
+python setup_nextflow.py
+```
+
+This will:
+1. Create a `.env` file with the Nextflow JAR path
+2. Clone the Nextflow repository
+3. Build the Nextflow fat JAR (includes all dependencies)
+4. Verify the setup
+
+**Options:**
+- `--force` – Rebuild even if JAR already exists
+- `--version v25.10.0` – Build a specific Nextflow version
+
+**Manual setup (alternative):**
+If you prefer to set up manually, see the [Manual Setup](#manual-setup) section at the end of this document.
 
 
 ## Installation & test drive
@@ -133,6 +156,37 @@ The engine intentionally exposes the underlying `session` and `loader` through `
 
 * The integration tests under `tests/` show how to assert against workflow outputs.
 * `notes/nextflow.md` contains low-level notes on how auto-workflow detection, observers, and fallback scanning behave internally.
+
+
+## Manual Setup
+
+If you prefer to set up Nextflow manually instead of using the automated script:
+
+1. **Create `.env` file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Clone Nextflow repository:**
+   ```bash
+   git clone https://github.com/nextflow-io/nextflow.git
+   ```
+
+3. **Build the fat JAR:**
+   ```bash
+   cd nextflow
+   make pack
+   ```
+
+4. **Update `.env` with the correct JAR path:**
+   ```bash
+   # Edit .env to point to: nextflow/build/releases/nextflow-25.10.0-one.jar
+   ```
+
+5. **Verify setup:**
+   ```bash
+   uv run python tests/test_integration.py
+   ```
 
 Happy hacking! 🚀
 

@@ -107,8 +107,27 @@ class NextflowEngine:
         if nextflow_jar_path is None:
             nextflow_jar_path = os.getenv(
                 "NEXTFLOW_JAR_PATH",
-                "nextflow/modules/nextflow/build/libs/nextflow-25.10.0-one.jar"
+                "nextflow/build/releases/nextflow-25.10.0-one.jar"
             )
+
+        # Check if JAR file exists
+        jar_path = Path(nextflow_jar_path)
+        if not jar_path.exists():
+            error_msg = (
+                f"\n{'='*70}\n"
+                f"ERROR: Nextflow JAR not found at: {nextflow_jar_path}\n"
+                f"{'='*70}\n\n"
+                f"This project requires a Nextflow fat JAR to run.\n\n"
+                f"To set up Nextflow automatically, run:\n"
+                f"    python setup_nextflow.py\n\n"
+                f"This will clone and build Nextflow for you.\n\n"
+                f"Alternatively, you can set up manually:\n"
+                f"1. Clone: git clone https://github.com/nextflow-io/nextflow.git\n"
+                f"2. Build: cd nextflow && make pack\n"
+                f"3. Update .env with the JAR path\n"
+                f"{'='*70}\n"
+            )
+            raise FileNotFoundError(error_msg)
 
         # Start JVM with Nextflow classpath
         if not jpype.isJVMStarted():
