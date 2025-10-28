@@ -71,6 +71,7 @@ def test_fastqc_with_docker():
     print("\n[4/5] Configuring Docker...")
     docker_config = {
         'enabled': True,
+        'registry': 'quay.io',  # Required for nf-core modules
         'remove': True,  # Auto-remove container after execution
     }
     print(f"    Docker config: {docker_config}")

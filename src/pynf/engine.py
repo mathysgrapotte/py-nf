@@ -183,6 +183,8 @@ class NextflowEngine:
             config: Additional configuration
             docker_config: Docker configuration options:
                 - enabled (bool): Enable Docker execution
+                - registry (str): Docker registry URL (e.g., 'quay.io' for nf-core modules)
+                - registryOverride (bool): Force override registry in fully qualified image names
                 - remove (bool): Auto-remove container after execution (default: True)
                 - runOptions (str): Additional docker run options
             meta: Metadata map for nf-core modules (e.g., {'id': 'sample1', 'single_end': False})
@@ -206,28 +208,28 @@ class NextflowEngine:
             for key, value in params.items():
                 session.getBinding().setVariable(key, value)
 
-        # Create input channels if files provided
-        if meta and input_files:
-            # Handle meta map + input files for nf-core modules
-            input_channel = self._create_meta_channel(session, meta, input_files)
-            session.getBinding().setVariable("input", input_channel)
-        elif input_files:
-            # Legacy behavior: just files without meta
-            input_channel = self.Channel.of(*input_files)
-            session.getBinding().setVariable("input", input_channel)
+        # Parse input parameter names from .nf file before loading script
+        param_names = self._parse_input_names_from_file(script_path)
+        print(f"DEBUG: Discovered param names: {param_names}")
 
-        # Parse the script with the v2 loader (DSL2 syntax)
+        # Map our Python inputs to session.params for standalone process execution
+        if param_names and (meta or input_files):
+            print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
+            self._set_params_from_inputs(session, param_names, meta, input_files)
+            print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
+
+        # Parse and load the script
         loader = self.ScriptLoaderFactory.create(session)
         java_path = jpype.java.nio.file.Paths.get(str(script_path))
         loader.parse(java_path)
+        script = loader.getScript()
 
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
         observer_registered = self._register_output_observer(session, observer_proxy)
         print(f"DEBUG: Observer registered: {observer_registered}")
 
-        # Capture script before execution
-        script = loader.getScript()
+        # Execute the script
         try:
             loader.runScript()
             session.fireDataflowNetwork(False)
@@ -275,6 +277,14 @@ class NextflowEngine:
         # Set Docker as enabled
         docker_map.put("enabled", docker_config.get("enabled", True))
 
+        # Optional: set docker registry (e.g., 'quay.io' for nf-core modules)
+        if "registry" in docker_config:
+            docker_map.put("registry", docker_config["registry"])
+
+        # Optional: set registry override behavior
+        if "registryOverride" in docker_config:
+            docker_map.put("registryOverride", docker_config["registryOverride"])
+
         # Optional: set docker run options
         if "runOptions" in docker_config:
             docker_map.put("runOptions", docker_config["runOptions"])
@@ -283,57 +293,79 @@ class NextflowEngine:
         if "remove" in docker_config:
             docker_map.put("remove", docker_config["remove"])
 
-    def _create_meta_channel(self, session, meta, input_files):
-        """
-        Create a Nextflow channel with tuple val(meta), path(files).
+    def _parse_input_names_from_file(self, script_path):
+        """Parse .nf file text to extract input parameter names."""
+        import re
 
-        This is the standard input format for nf-core modules.
+        try:
+            with open(script_path, 'r') as f:
+                content = f.read()
 
-        Args:
-            session: Nextflow session
-            meta: Python dict with metadata (e.g., {'id': 'sample1'})
-            input_files: List of file paths or single file path
+            # Find input: section in process
+            input_pattern = r'input:\s*\n(.*?)(?:\n\s*output:|\n\s*script:|\n\s*when:|\n\s*exec:)'
+            input_match = re.search(input_pattern, content, re.DOTALL)
 
-        Returns:
-            Nextflow channel containing tuple(meta_map, file_paths)
-        """
-        # Validate meta map
-        validate_meta_map(meta)
+            if not input_match:
+                print("DEBUG: No input: section found")
+                return []
 
-        # Import Java classes
+            input_section = input_match.group(1)
+            print(f"DEBUG: Found input section:\n{input_section}")
+
+            param_names = []
+
+            # Extract parameter names from input declarations
+            # Handles: val(name), path(name), tuple val(x), path(y)
+            tuple_pattern = r'tuple\s+(.+)'
+            simple_pattern = r'(?:val|path|file|env|stdin)\s*\(\s*(\w+)\s*\)'
+
+            for line in input_section.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+
+                # Check for tuple input
+                tuple_match = re.search(tuple_pattern, line)
+                if tuple_match:
+                    tuple_content = tuple_match.group(1)
+                    # Extract all parameter names from tuple
+                    for match in re.finditer(simple_pattern, tuple_content):
+                        param_names.append(match.group(1))
+                else:
+                    # Check for simple input
+                    simple_match = re.search(simple_pattern, line)
+                    if simple_match:
+                        param_names.append(simple_match.group(1))
+
+            print(f"DEBUG: Parsed param names: {param_names}")
+            return param_names
+
+        except Exception as e:
+            print(f"DEBUG: Error parsing input names: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _set_params_from_inputs(self, session, param_names, meta, input_files):
+        """Map meta and input_files to session.params using discovered parameter names."""
         HashMap = jpype.JClass("java.util.HashMap")
-        ArrayList = jpype.JClass("java.util.ArrayList")
+        params_obj = session.getParams()
 
-        # Convert Python dict to Java HashMap
-        meta_map = HashMap()
-        for key, value in meta.items():
-            meta_map.put(key, value)
+        if not param_names:
+            return
 
-        # Ensure input_files is a list
-        if not isinstance(input_files, list):
-            input_files = [input_files]
+        # Set meta to first param if provided
+        if meta and len(param_names) > 0:
+            meta_map = HashMap()
+            for key, value in meta.items():
+                meta_map.put(key, value)
+            params_obj.put(param_names[0], meta_map)
 
-        # Convert file paths to Java Path objects
-        file_paths = ArrayList()
-        for file_path in input_files:
-            java_path = jpype.java.nio.file.Paths.get(str(file_path))
-            file_paths.add(java_path)
-
-        # Create a tuple: [meta_map, file_paths]
-        # For single file, just use the path directly
-        if len(file_paths) == 1:
-            tuple_value = ArrayList()
-            tuple_value.add(meta_map)
-            tuple_value.add(file_paths.get(0))
-        else:
-            tuple_value = ArrayList()
-            tuple_value.add(meta_map)
-            tuple_value.add(file_paths)
-
-        # Create channel with this tuple
-        channel = self.Channel.of(tuple_value)
-
-        return channel
+        # Set input_files to second param if provided
+        if input_files and len(param_names) > 1:
+            files = input_files if isinstance(input_files, list) else [input_files]
+            file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
+            params_obj.put(param_names[1], file_value)
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):
