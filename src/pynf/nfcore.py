@@ -125,10 +125,12 @@ class NFCoreModuleManager:
         queue = [
             ("https://api.github.com/repos/nf-core/modules/contents/modules/nf-core", "")
         ]
+        processed_dirs = 0
 
         while queue:
             url, prefix = queue.pop(0)
             page = 1
+            print(f"Fetching: {prefix or 'root'}...", flush=True)
 
             while True:
                 paginated_url = f"{url}?per_page=100&page={page}"
@@ -151,6 +153,9 @@ class NFCoreModuleManager:
                         queue.append((subdir_url, f"{module_path}/"))
 
                 page += 1
+
+            processed_dirs += 1
+            print(f"  Found {len(modules)} modules so far (processed {processed_dirs} dirs)", flush=True)
 
         return sorted(modules)
 
