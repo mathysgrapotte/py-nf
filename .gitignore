@@ -17,3 +17,6 @@ nextflow/
 work/
 .nextflow/
 .nextflow.log*
+
+# nf-core modules cache
+nf-core-modules/
