@@ -8,6 +8,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def validate_meta_map(meta: dict, required_fields: list[str] = None):
+    """
+    Validate meta map contains required fields.
+
+    Args:
+        meta: Meta map dictionary
+        required_fields: List of required field names
+
+    Raises:
+        ValueError: If required fields are missing
+
+    Example:
+        >>> validate_meta_map({'id': 'sample1'}, required_fields=['id'])
+        >>> validate_meta_map({'name': 'test'}, required_fields=['id'])
+        ValueError: Missing required meta field: id
+    """
+    if required_fields is None:
+        required_fields = ['id']  # 'id' is always required
+
+    missing_fields = [field for field in required_fields if field not in meta]
+
+    if missing_fields:
+        raise ValueError(
+            f"Missing required meta fields: {', '.join(missing_fields)}. "
+            f"Meta map provided: {meta}"
+        )
+
+
 class _WorkflowOutputCollector:
     """Bridge TraceObserverV2 callbacks into Python structures."""
 
@@ -143,9 +171,28 @@ class NextflowEngine:
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, input_files=None, config=None):
+    def execute(self, script_path, executor="local", params=None, input_files=None, config=None, docker_config=None, meta=None):
+        """
+        Execute a Nextflow script with optional Docker configuration.
+
+        Args:
+            script_path: Path to the Nextflow script
+            executor: Executor type (default: "local")
+            params: Parameters to pass to the script
+            input_files: Input files for the script
+            config: Additional configuration
+            docker_config: Docker configuration options:
+                - enabled (bool): Enable Docker execution
+                - remove (bool): Auto-remove container after execution (default: True)
+                - runOptions (str): Additional docker run options
+            meta: Metadata map for nf-core modules (e.g., {'id': 'sample1', 'single_end': False})
+        """
         # Create session with config
         session = self.Session()
+
+        # Apply Docker configuration if provided
+        if docker_config:
+            self._configure_docker(session, docker_config)
 
         # Initialize session with script file
         ArrayList = jpype.JClass("java.util.ArrayList")
@@ -160,7 +207,12 @@ class NextflowEngine:
                 session.getBinding().setVariable(key, value)
 
         # Create input channels if files provided
-        if input_files:
+        if meta and input_files:
+            # Handle meta map + input files for nf-core modules
+            input_channel = self._create_meta_channel(session, meta, input_files)
+            session.getBinding().setVariable("input", input_channel)
+        elif input_files:
+            # Legacy behavior: just files without meta
             input_channel = self.Channel.of(*input_files)
             session.getBinding().setVariable("input", input_channel)
 
@@ -195,6 +247,93 @@ class NextflowEngine:
             file_events=collector.file_events(),
             task_workdirs=collector.task_workdirs(),
         )
+
+    def _configure_docker(self, session, docker_config):
+        """
+        Configure Docker settings for the Nextflow session.
+
+        This method sets up Docker configuration before the session is initialized,
+        allowing container execution.
+
+        Args:
+            session: Nextflow session object
+            docker_config: Docker configuration dict
+        """
+        # Import Java HashMap for configuration
+        HashMap = jpype.JClass("java.util.HashMap")
+
+        # Get the session config map
+        config = session.getConfig()
+
+        # Create or get docker config section
+        if not config.containsKey("docker"):
+            docker_map = HashMap()
+            config.put("docker", docker_map)
+        else:
+            docker_map = config.get("docker")
+
+        # Set Docker as enabled
+        docker_map.put("enabled", docker_config.get("enabled", True))
+
+        # Optional: set docker run options
+        if "runOptions" in docker_config:
+            docker_map.put("runOptions", docker_config["runOptions"])
+
+        # Optional: set auto-remove
+        if "remove" in docker_config:
+            docker_map.put("remove", docker_config["remove"])
+
+    def _create_meta_channel(self, session, meta, input_files):
+        """
+        Create a Nextflow channel with tuple val(meta), path(files).
+
+        This is the standard input format for nf-core modules.
+
+        Args:
+            session: Nextflow session
+            meta: Python dict with metadata (e.g., {'id': 'sample1'})
+            input_files: List of file paths or single file path
+
+        Returns:
+            Nextflow channel containing tuple(meta_map, file_paths)
+        """
+        # Validate meta map
+        validate_meta_map(meta)
+
+        # Import Java classes
+        HashMap = jpype.JClass("java.util.HashMap")
+        ArrayList = jpype.JClass("java.util.ArrayList")
+
+        # Convert Python dict to Java HashMap
+        meta_map = HashMap()
+        for key, value in meta.items():
+            meta_map.put(key, value)
+
+        # Ensure input_files is a list
+        if not isinstance(input_files, list):
+            input_files = [input_files]
+
+        # Convert file paths to Java Path objects
+        file_paths = ArrayList()
+        for file_path in input_files:
+            java_path = jpype.java.nio.file.Paths.get(str(file_path))
+            file_paths.add(java_path)
+
+        # Create a tuple: [meta_map, file_paths]
+        # For single file, just use the path directly
+        if len(file_paths) == 1:
+            tuple_value = ArrayList()
+            tuple_value.add(meta_map)
+            tuple_value.add(file_paths.get(0))
+        else:
+            tuple_value = ArrayList()
+            tuple_value.add(meta_map)
+            tuple_value.add(file_paths)
+
+        # Create channel with this tuple
+        channel = self.Channel.of(tuple_value)
+
+        return channel
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):
