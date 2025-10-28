@@ -8,6 +8,7 @@ from the official nf-core/modules repository.
 import requests
 from pathlib import Path
 from typing import Optional
+import time
 
 
 class NFCoreModule:
@@ -108,66 +109,41 @@ class NFCoreModuleManager:
         with open(dest, 'w') as f:
             f.write(response.text)
 
-    def _fetch_modules_iterative(self) -> list[str]:
+    def _fetch_directory_contents(self, url: str) -> list[str]:
         """
-        Iteratively fetch all nf-core modules from GitHub API with pagination.
+        Fetch directory contents from GitHub API.
 
-        Uses a queue-based approach to traverse all directories.
-        Paginate through results to minimize API requests (~15 instead of 1500+).
+        Args:
+            url: GitHub API URL for a directory
 
         Returns:
-            List of available module names
+            List of subdirectory names
 
         Raises:
             ValueError: If GitHub API request fails
         """
-        modules = []
-        queue = [
-            ("https://api.github.com/repos/nf-core/modules/contents/modules/nf-core", "")
-        ]
-        processed_dirs = 0
+        try:
+            response = requests.get(f"{url}?per_page=100")
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise ValueError(f"Failed to fetch from GitHub API: {e}")
 
-        while queue:
-            url, prefix = queue.pop(0)
-            page = 1
-            print(f"Fetching: {prefix or 'root'}...", flush=True)
+        items = response.json()
+        if not isinstance(items, list):
+            return []
 
-            while True:
-                paginated_url = f"{url}?per_page=100&page={page}"
-
-                try:
-                    response = requests.get(paginated_url)
-                    response.raise_for_status()
-                except requests.RequestException as e:
-                    raise ValueError(f"Failed to fetch modules from GitHub API: {e}")
-
-                items = response.json()
-                if not isinstance(items, list) or len(items) == 0:
-                    break
-
-                for item in items:
-                    if item["type"] == "dir":
-                        module_path = f"{prefix}{item['name']}" if prefix else item["name"]
-                        modules.append(module_path)
-                        subdir_url = item["url"]
-                        queue.append((subdir_url, f"{module_path}/"))
-
-                page += 1
-
-            processed_dirs += 1
-            print(f"  Found {len(modules)} modules so far (processed {processed_dirs} dirs)", flush=True)
-
-        return sorted(modules)
+        directories = [item["name"] for item in items if item["type"] == "dir"]
+        return sorted(directories)
 
     def list_available_modules(self) -> list[str]:
         """
-        List all available nf-core modules.
+        List all top-level nf-core modules (single GitHub API request).
 
         Returns cached list if available, otherwise fetches from GitHub
         and caches the result to avoid repeated API calls.
 
         Returns:
-            Sorted list of available module names
+            Sorted list of available top-level module names
 
         Raises:
             ValueError: If GitHub API request fails
@@ -180,8 +156,9 @@ class NFCoreModuleManager:
                 modules = [line.strip() for line in f if line.strip()]
             return modules
 
-        # Fetch modules from GitHub and cache
-        modules = self._fetch_modules_iterative()
+        # Fetch modules from GitHub (single request)
+        api_url = "https://api.github.com/repos/nf-core/modules/contents/modules/nf-core"
+        modules = self._fetch_directory_contents(api_url)
 
         # Write to cache file
         with open(cache_file, 'w') as f:
@@ -189,6 +166,25 @@ class NFCoreModuleManager:
                 f.write(f"{module}\n")
 
         return modules
+
+    def list_submodules(self, module_name: str) -> list[str]:
+        """
+        List all submodules in a given module directory.
+
+        For example, 'samtools' may contain submodules like 'view', 'sort', etc.
+
+        Args:
+            module_name: Name of the module (e.g., 'samtools')
+
+        Returns:
+            Sorted list of submodule names
+
+        Raises:
+            ValueError: If GitHub API request fails
+        """
+        api_url = f"https://api.github.com/repos/nf-core/modules/contents/modules/nf-core/{module_name}"
+        submodules = self._fetch_directory_contents(api_url)
+        return submodules
 
 
 def download_nfcore_module(tool_name: str, cache_dir: Optional[Path] = None) -> NFCoreModule:
