@@ -34,16 +34,25 @@ class NFCoreModuleManager:
 
     GITHUB_BASE_URL = "https://raw.githubusercontent.com/nf-core/modules/master/modules/nf-core"
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Optional[Path] = None, github_token: Optional[str] = None):
         """
         Initialize the module manager.
 
         Args:
             cache_dir: Directory to cache downloaded modules.
                       Defaults to ./nf-core-modules/
+            github_token: Optional GitHub personal access token for higher rate limits.
+                         Can also be set via GITHUB_TOKEN environment variable.
         """
         self.cache_dir = cache_dir or Path("./nf-core-modules")
         self.cache_dir.mkdir(exist_ok=True)
+
+        # Use provided token or environment variable
+        import os
+        self.github_token = github_token or os.getenv("GITHUB_TOKEN")
+        self.headers = {}
+        if self.github_token:
+            self.headers["Authorization"] = f"token {self.github_token}"
 
     def download_module(self, tool_name: str, force: bool = False) -> NFCoreModule:
         """
@@ -123,7 +132,7 @@ class NFCoreModuleManager:
             ValueError: If GitHub API request fails
         """
         try:
-            response = requests.get(f"{url}?per_page=100")
+            response = requests.get(f"{url}?per_page=100", headers=self.headers)
             response.raise_for_status()
         except requests.RequestException as e:
             raise ValueError(f"Failed to fetch from GitHub API: {e}")
@@ -134,6 +143,30 @@ class NFCoreModuleManager:
 
         directories = [item["name"] for item in items if item["type"] == "dir"]
         return sorted(directories)
+
+    def get_rate_limit_status(self) -> dict:
+        """
+        Get current GitHub API rate limit status.
+
+        Returns:
+            Dictionary with 'limit', 'remaining', and 'reset_time' (Unix timestamp)
+
+        Raises:
+            ValueError: If GitHub API request fails
+        """
+        try:
+            response = requests.get("https://api.github.com/rate_limit", headers=self.headers)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise ValueError(f"Failed to fetch rate limit status: {e}")
+
+        data = response.json()
+        core = data.get("resources", {}).get("core", {})
+        return {
+            "limit": core.get("limit"),
+            "remaining": core.get("remaining"),
+            "reset_time": core.get("reset")
+        }
 
     def list_available_modules(self) -> list[str]:
         """
