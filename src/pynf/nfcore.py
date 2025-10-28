@@ -108,16 +108,82 @@ class NFCoreModuleManager:
         with open(dest, 'w') as f:
             f.write(response.text)
 
+    def _fetch_modules_iterative(self) -> list[str]:
+        """
+        Iteratively fetch all nf-core modules from GitHub API with pagination.
+
+        Uses a queue-based approach to traverse all directories.
+        Paginate through results to minimize API requests (~15 instead of 1500+).
+
+        Returns:
+            List of available module names
+
+        Raises:
+            ValueError: If GitHub API request fails
+        """
+        modules = []
+        queue = [
+            ("https://api.github.com/repos/nf-core/modules/contents/modules/nf-core", "")
+        ]
+
+        while queue:
+            url, prefix = queue.pop(0)
+            page = 1
+
+            while True:
+                paginated_url = f"{url}?per_page=100&page={page}"
+
+                try:
+                    response = requests.get(paginated_url)
+                    response.raise_for_status()
+                except requests.RequestException as e:
+                    raise ValueError(f"Failed to fetch modules from GitHub API: {e}")
+
+                items = response.json()
+                if not isinstance(items, list) or len(items) == 0:
+                    break
+
+                for item in items:
+                    if item["type"] == "dir":
+                        module_path = f"{prefix}{item['name']}" if prefix else item["name"]
+                        modules.append(module_path)
+                        subdir_url = item["url"]
+                        queue.append((subdir_url, f"{module_path}/"))
+
+                page += 1
+
+        return sorted(modules)
+
     def list_available_modules(self) -> list[str]:
         """
         List all available nf-core modules.
 
-        This could use the GitHub API to list the modules directory.
-        For now, returns an empty list (implement if needed).
+        Returns cached list if available, otherwise fetches from GitHub
+        and caches the result to avoid repeated API calls.
+
+        Returns:
+            Sorted list of available module names
+
+        Raises:
+            ValueError: If GitHub API request fails
         """
-        # TODO: Use GitHub API to list modules
-        # GET https://api.github.com/repos/nf-core/modules/contents/modules/nf-core
-        return []
+        cache_file = self.cache_dir / "modules_list.txt"
+
+        # Return cached list if available
+        if cache_file.exists():
+            with open(cache_file, 'r') as f:
+                modules = [line.strip() for line in f if line.strip()]
+            return modules
+
+        # Fetch modules from GitHub and cache
+        modules = self._fetch_modules_iterative()
+
+        # Write to cache file
+        with open(cache_file, 'w') as f:
+            for module in modules:
+                f.write(f"{module}\n")
+
+        return modules
 
 
 def download_nfcore_module(tool_name: str, cache_dir: Optional[Path] = None) -> NFCoreModule:
