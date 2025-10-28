@@ -4,7 +4,7 @@ from pathlib import Path
 from pynf.nfcore import NFCoreModuleManager
 
 # Create a temporary cache directory for testing
-cache_dir = Path("./test_modules_cache")
+cache_dir = Path("./nf_core_list_cache")
 
 # Initialize manager
 manager = NFCoreModuleManager(cache_dir=cache_dir)
