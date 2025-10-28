@@ -167,6 +167,12 @@ class NextflowEngine:
         self.Channel = jpype.JClass("nextflow.Channel")
         self.TraceObserverV2 = jpype.JClass("nextflow.trace.TraceObserverV2")
 
+        # Import Groovy AST classes for parsing
+        self.CompilerConfiguration = jpype.JClass("org.codehaus.groovy.control.CompilerConfiguration")
+        self.CompilationUnit = jpype.JClass("org.codehaus.groovy.control.CompilationUnit")
+        self.GroovyClassLoader = jpype.JClass("groovy.lang.GroovyClassLoader")
+        self.Phases = jpype.JClass("org.codehaus.groovy.control.Phases")
+
     def load_script(self, nf_file_path):
         # Return the Path object for script loading
         return Path(nf_file_path)
@@ -208,14 +214,14 @@ class NextflowEngine:
             for key, value in params.items():
                 session.getBinding().setVariable(key, value)
 
-        # Parse input parameter names from .nf file before loading script
-        param_names = self._parse_input_names_from_file(script_path)
-        print(f"DEBUG: Discovered param names: {param_names}")
+        # Parse input channels from .nf file before loading script
+        input_channels = self._parse_inputs_from_ast(script_path)
+        print(f"DEBUG: Discovered input channels: {input_channels}")
 
         # Map our Python inputs to session.params for standalone process execution
-        if param_names and (meta or input_files):
+        if input_channels and (meta or input_files):
             print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
-            self._set_params_from_inputs(session, param_names, meta, input_files)
+            self._set_params_from_inputs(session, input_channels, meta, input_files)
             print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
 
         # Parse and load the script
@@ -293,79 +299,201 @@ class NextflowEngine:
         if "remove" in docker_config:
             docker_map.put("remove", docker_config["remove"])
 
-    def _parse_input_names_from_file(self, script_path):
-        """Parse .nf file text to extract input parameter names."""
-        import re
+    def _extract_variable_name(self, expr):
+        """Extract variable name from an expression."""
+        expr_class = expr.getClass().getName()
+        if 'VariableExpression' in expr_class:
+            return str(expr.getName())
+        return None
 
-        try:
-            with open(script_path, 'r') as f:
-                content = f.read()
+    def _extract_input_params(self, method_call):
+        """Extract parameter names from a method call (val, path, tuple, etc.)."""
+        method_name = str(method_call.getMethod().getText())
+        args = method_call.getArguments()
+        params = []
 
-            # Find input: section in process
-            input_pattern = r'input:\s*\n(.*?)(?:\n\s*output:|\n\s*script:|\n\s*when:|\n\s*exec:)'
-            input_match = re.search(input_pattern, content, re.DOTALL)
+        if method_name == 'tuple':
+            for arg in args:
+                arg_class = arg.getClass().getName()
+                if 'MethodCallExpression' in arg_class:
+                    nested_params = self._extract_input_params(arg)
+                    params.extend(nested_params)
+        else:
+            for arg in args:
+                var_name = self._extract_variable_name(arg)
+                if var_name:
+                    params.append({'type': method_name, 'name': var_name})
 
-            if not input_match:
-                print("DEBUG: No input: section found")
-                return []
+        return params
 
-            input_section = input_match.group(1)
-            print(f"DEBUG: Found input section:\n{input_section}")
+    def _find_process_closure(self, run_statements):
+        """Find and return the process closure from run() statements."""
+        for stmt in run_statements:
+            if not hasattr(stmt, 'getExpression'):
+                continue
 
-            param_names = []
+            expr = stmt.getExpression()
+            expr_class = expr.getClass().getName()
 
-            # Extract parameter names from input declarations
-            # Handles: val(name), path(name), tuple val(x), path(y)
-            tuple_pattern = r'tuple\s+(.+)'
-            simple_pattern = r'(?:val|path|file|env|stdin)\s*\(\s*(\w+)\s*\)'
+            if 'MethodCallExpression' not in expr_class:
+                continue
 
-            for line in input_section.split('\n'):
-                line = line.strip()
-                if not line:
+            method = expr.getMethod()
+            if str(method.getText()) != 'process':
+                continue
+
+            # Found process() call, get its arguments
+            args = expr.getArguments()
+            for arg in args:
+                arg_class = arg.getClass().getName()
+                if 'MethodCallExpression' not in arg_class:
                     continue
 
-                # Check for tuple input
-                tuple_match = re.search(tuple_pattern, line)
-                if tuple_match:
-                    tuple_content = tuple_match.group(1)
-                    # Extract all parameter names from tuple
-                    for match in re.finditer(simple_pattern, tuple_content):
-                        param_names.append(match.group(1))
-                else:
-                    # Check for simple input
-                    simple_match = re.search(simple_pattern, line)
-                    if simple_match:
-                        param_names.append(simple_match.group(1))
+                # This is the process name call (e.g., SAMTOOLS_VIEW(...))
+                samtools_args = arg.getArguments()
+                for samtools_arg in samtools_args:
+                    samtools_arg_class = samtools_arg.getClass().getName()
+                    if 'ClosureExpression' in samtools_arg_class:
+                        return samtools_arg
 
-            print(f"DEBUG: Parsed param names: {param_names}")
-            return param_names
+        return None
+
+    def _parse_inputs_from_ast(self, script_path):
+        """Parse .nf file using Groovy AST to extract input channel definitions."""
+        try:
+            nf_content = script_path.read_text()
+
+            # Configure compiler
+            config = self.CompilerConfiguration()
+            config.setScriptBaseClass("nextflow.script.BaseScript")
+            classLoader = self.GroovyClassLoader()
+            unit = self.CompilationUnit(config, None, classLoader)
+            unit.addSource(str(script_path), nf_content)
+            unit.compile(self.Phases.CONVERSION)
+
+            # Get the AST
+            ast = unit.getAST()
+            modules = ast.getModules()
+            module = modules[0]
+            classes = module.getClasses()
+            cls_node = classes[0]
+
+            # Find the run() method
+            run_method = None
+            for method in cls_node.getMethods():
+                if str(method.getName()) == 'run':
+                    run_method = method
+                    break
+
+            if not run_method:
+                print("DEBUG: No run() method found")
+                return []
+
+            # Get statements from run()
+            code = run_method.getCode()
+            if not hasattr(code, 'getStatements'):
+                print("DEBUG: run() doesn't have statements")
+                return []
+
+            run_statements = code.getStatements()
+
+            # Find the process closure
+            process_closure = self._find_process_closure(run_statements)
+            if not process_closure:
+                print("DEBUG: Could not find process closure")
+                return []
+
+            # Get statements from the closure
+            closure_code = process_closure.getCode()
+            statements = closure_code.getStatements()
+
+            # Extract input channels
+            input_methods = {'tuple', 'val', 'path', 'file', 'env', 'stdin', 'each'}
+            input_channels = []
+            found_output = False
+
+            for stmt in statements:
+                stmt_class = stmt.getClass().getName()
+                if 'ExpressionStatement' not in stmt_class:
+                    continue
+
+                expr = stmt.getExpression()
+                expr_class = expr.getClass().getName()
+                if 'MethodCallExpression' not in expr_class:
+                    continue
+
+                method = expr.getMethod()
+                method_text = str(method.getText())
+
+                # Check if we've reached outputs
+                args = expr.getArguments()
+                for arg in args:
+                    if not hasattr(arg, 'getClass'):
+                        continue
+                    if 'MapExpression' not in arg.getClass().getName():
+                        continue
+
+                    entries = arg.getMapEntryExpressions()
+                    for entry in entries:
+                        key = entry.getKeyExpression()
+                        if hasattr(key, 'getText') and str(key.getText()) == 'emit':
+                            found_output = True
+                            break
+
+                if found_output:
+                    break
+
+                # Check if it's an input method
+                if method_text in input_methods:
+                    params = self._extract_input_params(expr)
+                    channel_info = {
+                        'type': method_text,
+                        'params': params
+                    }
+                    input_channels.append(channel_info)
+
+            return input_channels
 
         except Exception as e:
-            print(f"DEBUG: Error parsing input names: {e}")
+            print(f"DEBUG: Error parsing inputs from AST: {e}")
             import traceback
             traceback.print_exc()
             return []
 
-    def _set_params_from_inputs(self, session, param_names, meta, input_files):
-        """Map meta and input_files to session.params using discovered parameter names."""
+    def _set_params_from_inputs(self, session, input_channels, meta, input_files):
+        """Map meta and input_files to session.params using discovered input channels."""
         HashMap = jpype.JClass("java.util.HashMap")
         params_obj = session.getParams()
 
-        if not param_names:
+        if not input_channels:
             return
 
-        # Set meta to first param if provided
-        if meta and len(param_names) > 0:
-            meta_map = HashMap()
-            for key, value in meta.items():
-                meta_map.put(key, value)
-            params_obj.put(param_names[0], meta_map)
+        # For standalone process execution, Nextflow uses the first parameter name
+        # from each channel as the key in session.params
 
-        # Set input_files to second param if provided
-        if input_files and len(param_names) > 1:
-            files = input_files if isinstance(input_files, list) else [input_files]
-            file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
-            params_obj.put(param_names[1], file_value)
+        # Get the first channel (typically contains meta and input files)
+        if len(input_channels) > 0:
+            first_channel = input_channels[0]
+            channel_params = first_channel.get('params', [])
+
+            if not channel_params:
+                return
+
+            # First param name is used as the key
+            first_param_name = channel_params[0]['name']
+
+            # Set meta to first param if provided
+            if meta:
+                meta_map = HashMap()
+                for key, value in meta.items():
+                    meta_map.put(key, value)
+                params_obj.put(first_param_name, meta_map)
+
+            # Set input_files to the same channel using first param name if no meta
+            if input_files and not meta:
+                files = input_files if isinstance(input_files, list) else [input_files]
+                file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
+                params_obj.put(first_param_name, file_value)
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):
