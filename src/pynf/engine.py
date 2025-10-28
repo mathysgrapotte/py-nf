@@ -8,6 +8,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def validate_meta_map(meta: dict, required_fields: list[str] = None):
+    """
+    Validate meta map contains required fields.
+
+    Args:
+        meta: Meta map dictionary
+        required_fields: List of required field names
+
+    Raises:
+        ValueError: If required fields are missing
+
+    Example:
+        >>> validate_meta_map({'id': 'sample1'}, required_fields=['id'])
+        >>> validate_meta_map({'name': 'test'}, required_fields=['id'])
+        ValueError: Missing required meta field: id
+    """
+    if required_fields is None:
+        required_fields = ['id']  # 'id' is always required
+
+    missing_fields = [field for field in required_fields if field not in meta]
+
+    if missing_fields:
+        raise ValueError(
+            f"Missing required meta fields: {', '.join(missing_fields)}. "
+            f"Meta map provided: {meta}"
+        )
+
+
 class _WorkflowOutputCollector:
     """Bridge TraceObserverV2 callbacks into Python structures."""
 
@@ -143,9 +171,30 @@ class NextflowEngine:
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, input_files=None, config=None):
+    def execute(self, script_path, executor="local", params=None, input_files=None, config=None, docker_config=None, meta=None):
+        """
+        Execute a Nextflow script with optional Docker configuration.
+
+        Args:
+            script_path: Path to the Nextflow script
+            executor: Executor type (default: "local")
+            params: Parameters to pass to the script
+            input_files: Input files for the script
+            config: Additional configuration
+            docker_config: Docker configuration options:
+                - enabled (bool): Enable Docker execution
+                - registry (str): Docker registry URL (e.g., 'quay.io' for nf-core modules)
+                - registryOverride (bool): Force override registry in fully qualified image names
+                - remove (bool): Auto-remove container after execution (default: True)
+                - runOptions (str): Additional docker run options
+            meta: Metadata map for nf-core modules (e.g., {'id': 'sample1', 'single_end': False})
+        """
         # Create session with config
         session = self.Session()
+
+        # Apply Docker configuration if provided
+        if docker_config:
+            self._configure_docker(session, docker_config)
 
         # Initialize session with script file
         ArrayList = jpype.JClass("java.util.ArrayList")
@@ -159,23 +208,28 @@ class NextflowEngine:
             for key, value in params.items():
                 session.getBinding().setVariable(key, value)
 
-        # Create input channels if files provided
-        if input_files:
-            input_channel = self.Channel.of(*input_files)
-            session.getBinding().setVariable("input", input_channel)
+        # Parse input parameter names from .nf file before loading script
+        param_names = self._parse_input_names_from_file(script_path)
+        print(f"DEBUG: Discovered param names: {param_names}")
 
-        # Parse the script with the v2 loader (DSL2 syntax)
+        # Map our Python inputs to session.params for standalone process execution
+        if param_names and (meta or input_files):
+            print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
+            self._set_params_from_inputs(session, param_names, meta, input_files)
+            print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
+
+        # Parse and load the script
         loader = self.ScriptLoaderFactory.create(session)
         java_path = jpype.java.nio.file.Paths.get(str(script_path))
         loader.parse(java_path)
+        script = loader.getScript()
 
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
         observer_registered = self._register_output_observer(session, observer_proxy)
         print(f"DEBUG: Observer registered: {observer_registered}")
 
-        # Capture script before execution
-        script = loader.getScript()
+        # Execute the script
         try:
             loader.runScript()
             session.fireDataflowNetwork(False)
@@ -195,6 +249,123 @@ class NextflowEngine:
             file_events=collector.file_events(),
             task_workdirs=collector.task_workdirs(),
         )
+
+    def _configure_docker(self, session, docker_config):
+        """
+        Configure Docker settings for the Nextflow session.
+
+        This method sets up Docker configuration before the session is initialized,
+        allowing container execution.
+
+        Args:
+            session: Nextflow session object
+            docker_config: Docker configuration dict
+        """
+        # Import Java HashMap for configuration
+        HashMap = jpype.JClass("java.util.HashMap")
+
+        # Get the session config map
+        config = session.getConfig()
+
+        # Create or get docker config section
+        if not config.containsKey("docker"):
+            docker_map = HashMap()
+            config.put("docker", docker_map)
+        else:
+            docker_map = config.get("docker")
+
+        # Set Docker as enabled
+        docker_map.put("enabled", docker_config.get("enabled", True))
+
+        # Optional: set docker registry (e.g., 'quay.io' for nf-core modules)
+        if "registry" in docker_config:
+            docker_map.put("registry", docker_config["registry"])
+
+        # Optional: set registry override behavior
+        if "registryOverride" in docker_config:
+            docker_map.put("registryOverride", docker_config["registryOverride"])
+
+        # Optional: set docker run options
+        if "runOptions" in docker_config:
+            docker_map.put("runOptions", docker_config["runOptions"])
+
+        # Optional: set auto-remove
+        if "remove" in docker_config:
+            docker_map.put("remove", docker_config["remove"])
+
+    def _parse_input_names_from_file(self, script_path):
+        """Parse .nf file text to extract input parameter names."""
+        import re
+
+        try:
+            with open(script_path, 'r') as f:
+                content = f.read()
+
+            # Find input: section in process
+            input_pattern = r'input:\s*\n(.*?)(?:\n\s*output:|\n\s*script:|\n\s*when:|\n\s*exec:)'
+            input_match = re.search(input_pattern, content, re.DOTALL)
+
+            if not input_match:
+                print("DEBUG: No input: section found")
+                return []
+
+            input_section = input_match.group(1)
+            print(f"DEBUG: Found input section:\n{input_section}")
+
+            param_names = []
+
+            # Extract parameter names from input declarations
+            # Handles: val(name), path(name), tuple val(x), path(y)
+            tuple_pattern = r'tuple\s+(.+)'
+            simple_pattern = r'(?:val|path|file|env|stdin)\s*\(\s*(\w+)\s*\)'
+
+            for line in input_section.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+
+                # Check for tuple input
+                tuple_match = re.search(tuple_pattern, line)
+                if tuple_match:
+                    tuple_content = tuple_match.group(1)
+                    # Extract all parameter names from tuple
+                    for match in re.finditer(simple_pattern, tuple_content):
+                        param_names.append(match.group(1))
+                else:
+                    # Check for simple input
+                    simple_match = re.search(simple_pattern, line)
+                    if simple_match:
+                        param_names.append(simple_match.group(1))
+
+            print(f"DEBUG: Parsed param names: {param_names}")
+            return param_names
+
+        except Exception as e:
+            print(f"DEBUG: Error parsing input names: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _set_params_from_inputs(self, session, param_names, meta, input_files):
+        """Map meta and input_files to session.params using discovered parameter names."""
+        HashMap = jpype.JClass("java.util.HashMap")
+        params_obj = session.getParams()
+
+        if not param_names:
+            return
+
+        # Set meta to first param if provided
+        if meta and len(param_names) > 0:
+            meta_map = HashMap()
+            for key, value in meta.items():
+                meta_map.put(key, value)
+            params_obj.put(param_names[0], meta_map)
+
+        # Set input_files to second param if provided
+        if input_files and len(param_names) > 1:
+            files = input_files if isinstance(input_files, list) else [input_files]
+            file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
+            params_obj.put(param_names[1], file_value)
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):
