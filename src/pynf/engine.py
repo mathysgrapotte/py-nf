@@ -3,6 +3,7 @@ import jpype
 import jpype.imports
 from pathlib import Path
 from dotenv import load_dotenv
+from pynf.input_validation import InputValidator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -172,7 +173,7 @@ class NextflowEngine:
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, input_files=None, config=None, docker_config=None, meta=None):
+    def execute(self, script_path, executor="local", params=None, inputs=None, config=None, docker_config=None):
         """
         Execute a Nextflow script with optional Docker configuration.
 
@@ -180,7 +181,8 @@ class NextflowEngine:
             script_path: Path to the Nextflow script
             executor: Executor type (default: "local")
             params: Parameters to pass to the script
-            input_files: Input files for the script
+            inputs: List of dicts, each dict contains parameter names and values for one input channel.
+                   Example: [{'meta': {...}, 'input': 'file.bam'}, {'fasta': 'ref.fa'}]
             config: Additional configuration
             docker_config: Docker configuration options:
                 - enabled (bool): Enable Docker execution
@@ -188,7 +190,6 @@ class NextflowEngine:
                 - registryOverride (bool): Force override registry in fully qualified image names
                 - remove (bool): Auto-remove container after execution (default: True)
                 - runOptions (str): Additional docker run options
-            meta: Metadata map for nf-core modules (e.g., {'id': 'sample1', 'single_end': False})
         """
         # Create session with config
         session = self.Session()
@@ -219,10 +220,12 @@ class NextflowEngine:
         input_channels = self._get_process_inputs(loader, script)
         print(f"DEBUG: Discovered input channels: {input_channels}")
 
-        # Map our Python inputs to session.params for standalone process execution
-        if input_channels and (meta or input_files):
-            print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
-            self._set_params_from_inputs(session, input_channels, meta, input_files)
+        # Validate and map inputs to session.params
+        if inputs:
+            # Validate inputs against expected structure
+            InputValidator.validate_inputs(inputs, input_channels)
+            print(f"DEBUG: Validation passed, setting params for {len(inputs)} input groups")
+            self._set_params_from_inputs(session, input_channels, inputs)
             print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
 
         collector = _WorkflowOutputCollector()
@@ -387,40 +390,74 @@ class NextflowEngine:
             traceback.print_exc()
             return []
 
-    def _set_params_from_inputs(self, session, input_channels, meta, input_files):
-        """Map meta and input_files to session.params using discovered input channels."""
+    def _set_params_from_inputs(self, session, input_channels, inputs):
+        """
+        Map user inputs to session.params using discovered input channels.
+
+        Args:
+            session: Nextflow session
+            input_channels: List of expected input channel structures from .nf script
+            inputs: List of dicts, each dict contains parameter names and values for one input channel
+        """
         HashMap = jpype.JClass("java.util.HashMap")
         params_obj = session.getParams()
 
-        if not input_channels:
+        if not input_channels or not inputs:
             return
 
-        # For standalone process execution, Nextflow uses the first parameter name
-        # from each channel as the key in session.params
+        # Iterate through each input group and set parameters
+        for input_dict, channel_info in zip(inputs, input_channels):
+            channel_params = channel_info.get('params', [])
 
-        # Get the first channel (typically contains meta and input files)
-        if len(input_channels) > 0:
-            first_channel = input_channels[0]
-            channel_params = first_channel.get('params', [])
+            # For each parameter in this channel, set its value in session.params
+            for param_info in channel_params:
+                param_name = param_info['name']
+                param_type = param_info['type']
 
-            if not channel_params:
-                return
+                if param_name not in input_dict:
+                    continue
 
-            # First param name is used as the key
-            first_param_name = channel_params[0]['name']
+                param_value = input_dict[param_name]
 
-            # Set meta to first param if provided
-            if meta:
-                meta_map = HashMap()
-                for key, value in meta.items():
-                    meta_map.put(key, value)
-                params_obj.put(first_param_name, meta_map)
+                # Convert Python value to appropriate Java type
+                java_value = self._convert_to_java_type(param_value, param_type)
+                params_obj.put(param_name, java_value)
 
-            # Set input_files to the same channel using first param name if no meta
-            if input_files and not meta:
-                files = input_files if isinstance(input_files, list) else [input_files]
-                file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
-                params_obj.put(first_param_name, file_value)
+    def _convert_to_java_type(self, value, param_type):
+        """
+        Convert Python value to appropriate Java type based on parameter type.
+
+        Args:
+            value: Python value to convert
+            param_type: Parameter type (val, path, etc.)
+
+        Returns:
+            Java object suitable for Nextflow
+        """
+        HashMap = jpype.JClass("java.util.HashMap")
+
+        # Handle None
+        if value is None:
+            return None
+
+        # Handle dict (meta maps)
+        if isinstance(value, dict):
+            meta_map = HashMap()
+            for key, val in value.items():
+                meta_map.put(key, val)
+            return meta_map
+
+        # Handle lists (multiple files, etc.)
+        if isinstance(value, list):
+            # Convert to comma-separated string for file paths
+            return ",".join(str(v) for v in value)
+
+        # For path types, convert to string
+        if param_type == 'path':
+            return str(value)
+
+        # For val types, return as-is (let JPype handle conversion)
+        return value
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):

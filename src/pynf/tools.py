@@ -236,9 +236,8 @@ def get_rate_limit_status(
 
 def run_nfcore_module(
     module: str,
-    input_files: Optional[list] = None,
+    inputs: Optional[list] = None,
     params: Optional[Dict[str, Any]] = None,
-    meta: Optional[Dict[str, Any]] = None,
     executor: str = "local",
     docker_enabled: bool = False,
     cache_dir: Optional[Path] = None,
@@ -249,9 +248,9 @@ def run_nfcore_module(
 
     Args:
         module: Module name (e.g., 'fastqc')
-        input_files: List of input files
+        inputs: List of dicts, each dict contains parameter names and values for one input channel
+               Example: [{'meta': {...}, 'reads': ['file1.fastq', 'file2.fastq']}]
         params: Dictionary of parameters
-        meta: Metadata dictionary (required for nf-core modules)
         executor: Nextflow executor type (default: 'local')
         docker_enabled: Enable Docker execution
         cache_dir: Directory to cache modules
@@ -263,7 +262,7 @@ def run_nfcore_module(
     Raises:
         ValueError: If module cannot be found/downloaded
     """
-    from . import run_module
+    from pynf import run_module
 
     # Download module if not cached
     nf_module = download_module(
@@ -283,9 +282,8 @@ def run_nfcore_module(
     # Execute the module
     return run_module(
         str(nf_module.main_nf),
-        input_files=input_files,
+        inputs=inputs,
         params=params,
         executor=executor,
         docker_config=docker_config,
-        meta=meta,
     )

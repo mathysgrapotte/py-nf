@@ -293,22 +293,16 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
 @cli.command()
 @click.argument("module")
 @click.option(
-    "--input",
-    "input_files",
-    multiple=True,
-    help="Input files to pass to the module.",
+    "--inputs",
+    type=str,
+    default=None,
+    help="Inputs as JSON string. Format: '[{\"param1\": \"value1\"}, {\"param2\": \"value2\"}]'",
 )
 @click.option(
     "--params",
     type=str,
     default=None,
     help="Parameters as JSON string or key=value pairs.",
-)
-@click.option(
-    "--meta",
-    type=str,
-    default=None,
-    help="Metadata as JSON string (required for nf-core modules).",
 )
 @click.option(
     "--docker",
@@ -325,9 +319,8 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
 def run(
     ctx: CLIContext,
     module: str,
-    input_files: tuple,
+    inputs: Optional[str],
     params: Optional[str],
-    meta: Optional[str],
     docker: bool,
     executor: str,
 ):
@@ -336,7 +329,7 @@ def run(
     Automatically downloads the module if not present locally.
 
     Example:
-        pynf run fastqc --input sample.fastq --meta '{"id": "sample1"}'
+        pynf run fastqc --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]'
     """
     try:
         # Parse parameters
@@ -359,36 +352,33 @@ def run(
                 console.print(f"[red]Error parsing parameters: {e}[/red]")
                 raise click.Abort()
 
-        # Parse metadata
-        parsed_meta = {}
-        if meta:
+        # Parse inputs
+        parsed_inputs = None
+        if inputs:
             try:
-                parsed_meta = json.loads(meta)
+                parsed_inputs = json.loads(inputs)
+                if not isinstance(parsed_inputs, list):
+                    console.print(f"[red]Error: inputs must be a JSON list of dicts[/red]")
+                    raise click.Abort()
             except json.JSONDecodeError as e:
-                console.print(f"[red]Error parsing metadata (must be valid JSON): {e}[/red]")
+                console.print(f"[red]Error parsing inputs (must be valid JSON list): {e}[/red]")
                 raise click.Abort()
-
-        # Prepare input files list
-        input_list = list(input_files) if input_files else None
 
         # Display execution info
         console.print(f"\n[bold green]Running module: {module}[/bold green]")
         console.print(f"[cyan]Executor: {executor}[/cyan]")
-        if input_list:
-            console.print(f"[cyan]Inputs: {input_list}[/cyan]")
+        if parsed_inputs:
+            console.print(f"[cyan]Inputs: {parsed_inputs}[/cyan]")
         if parsed_params:
             console.print(f"[cyan]Params: {parsed_params}[/cyan]")
-        if parsed_meta:
-            console.print(f"[cyan]Meta: {parsed_meta}[/cyan]")
         console.print()
 
         # Run the module
         with console.status("[bold green]Executing..."):
             result = tools.run_nfcore_module(
                 module,
-                input_files=input_list,
+                inputs=parsed_inputs,
                 params=parsed_params,
-                meta=parsed_meta,
                 executor=executor,
                 docker_enabled=docker,
                 cache_dir=ctx.cache_dir,
