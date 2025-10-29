@@ -18,28 +18,27 @@ from . import tools
 console = Console()
 
 
-def _get_specs_from_group(input_group):
-    """Extract all specs from an input group (handles nested lists/dicts)."""
-    if type(input_group) is dict:
-        yield input_group
-    elif type(input_group) is list:
-        for item in input_group:
-            yield from _get_specs_from_group(item)
-
-
 def _format_input_group_table(group_idx: int, input_group) -> Table:
-    """Create a table for an input group."""
-    table = Table(title=f"Input Group {group_idx + 1}", show_header=True, header_style="bold blue")
-    table.add_column("Parameter", style="cyan")
-    table.add_column("Type", style="yellow")
-    table.add_column("Description", style="green")
+    """
+    Create a table for an input channel from native API format.
 
-    specs = [s for s in _get_specs_from_group(input_group)]
-    for param_spec in specs:
-        for param_name, param_info in param_spec.items():
-            param_type = param_info.get("type", "") if type(param_info) is dict else ""
-            desc = param_info.get("description", "") if type(param_info) is dict else ""
-            table.add_row(param_name, param_type, desc)
+    Input format: {'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}, ...]}
+    """
+    channel_type = input_group.get('type', 'unknown')
+    params = input_group.get('params', [])
+
+    table = Table(
+        title=f"Input Channel {group_idx + 1} (type: {channel_type})",
+        show_header=True,
+        header_style="bold blue"
+    )
+    table.add_column("Parameter Name", style="cyan")
+    table.add_column("Parameter Type", style="yellow")
+
+    for param in params:
+        param_name = param.get('name', 'unknown')
+        param_type = param.get('type', 'unknown')
+        table.add_row(param_name, param_type)
 
     return table
 

@@ -166,12 +166,7 @@ class NextflowEngine:
         self.Session = jpype.JClass("nextflow.Session")
         self.Channel = jpype.JClass("nextflow.Channel")
         self.TraceObserverV2 = jpype.JClass("nextflow.trace.TraceObserverV2")
-
-        # Import Groovy AST classes for parsing
-        self.CompilerConfiguration = jpype.JClass("org.codehaus.groovy.control.CompilerConfiguration")
-        self.CompilationUnit = jpype.JClass("org.codehaus.groovy.control.CompilationUnit")
-        self.GroovyClassLoader = jpype.JClass("groovy.lang.GroovyClassLoader")
-        self.Phases = jpype.JClass("org.codehaus.groovy.control.Phases")
+        self.ScriptMeta = jpype.JClass("nextflow.script.ScriptMeta")
 
     def load_script(self, nf_file_path):
         # Return the Path object for script loading
@@ -214,8 +209,14 @@ class NextflowEngine:
             for key, value in params.items():
                 session.getBinding().setVariable(key, value)
 
-        # Parse input channels from .nf file before loading script
-        input_channels = self._parse_inputs_from_ast(script_path)
+        # Parse and load the script
+        loader = self.ScriptLoaderFactory.create(session)
+        java_path = jpype.java.nio.file.Paths.get(str(script_path))
+        loader.parse(java_path)
+        script = loader.getScript()
+
+        # Extract input channels using Nextflow native API
+        input_channels = self._get_process_inputs(loader, script)
         print(f"DEBUG: Discovered input channels: {input_channels}")
 
         # Map our Python inputs to session.params for standalone process execution
@@ -223,12 +224,6 @@ class NextflowEngine:
             print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
             self._set_params_from_inputs(session, input_channels, meta, input_files)
             print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
-
-        # Parse and load the script
-        loader = self.ScriptLoaderFactory.create(session)
-        java_path = jpype.java.nio.file.Paths.get(str(script_path))
-        loader.parse(java_path)
-        script = loader.getScript()
 
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
@@ -299,163 +294,95 @@ class NextflowEngine:
         if "remove" in docker_config:
             docker_map.put("remove", docker_config["remove"])
 
-    def _extract_variable_name(self, expr):
-        """Extract variable name from an expression."""
-        expr_class = expr.getClass().getName()
-        if 'VariableExpression' in expr_class:
-            return str(expr.getName())
-        return None
+    def _extract_tuple_components(self, inp):
+        """Extract components from a tuple input parameter."""
+        components = []
+        inner = inp.getInner()
 
-    def _extract_input_params(self, method_call):
-        """Extract parameter names from a method call (val, path, tuple, etc.)."""
-        method_name = str(method_call.getMethod().getText())
-        args = method_call.getArguments()
-        params = []
+        for component in inner:
+            components.append({
+                'type': str(component.getTypeName()),
+                'name': str(component.getName())
+            })
 
-        if method_name == 'tuple':
-            for arg in args:
-                arg_class = arg.getClass().getName()
-                if 'MethodCallExpression' in arg_class:
-                    nested_params = self._extract_input_params(arg)
-                    params.extend(nested_params)
+        return components
+
+    def _extract_simple_param(self, inp):
+        """Extract a simple (non-tuple) input parameter."""
+        return {
+            'type': str(inp.getTypeName()),
+            'name': str(inp.getName())
+        }
+
+    def _build_channel_info(self, inp):
+        """Build channel info dict from an input parameter."""
+        channel_info = {
+            'type': str(inp.getTypeName()),
+            'params': []
+        }
+
+        # Handle tuple inputs
+        if hasattr(inp, 'getInner') and inp.getInner() is not None:
+            channel_info['params'] = self._extract_tuple_components(inp)
         else:
-            for arg in args:
-                var_name = self._extract_variable_name(arg)
-                if var_name:
-                    params.append({'type': method_name, 'name': var_name})
+            # Simple input (val, path, etc.)
+            channel_info['params'].append(self._extract_simple_param(inp))
 
-        return params
+        return channel_info
 
-    def _find_process_closure(self, run_statements):
-        """Find and return the process closure from run() statements."""
-        for stmt in run_statements:
-            if not hasattr(stmt, 'getExpression'):
-                continue
+    def _extract_process_inputs(self, process_def):
+        """Extract all inputs from a process definition."""
+        process_config = process_def.getProcessConfig()
+        inputs = process_config.getInputs()
 
-            expr = stmt.getExpression()
-            expr_class = expr.getClass().getName()
+        return [self._build_channel_info(inp) for inp in inputs]
 
-            if 'MethodCallExpression' not in expr_class:
-                continue
+    def _get_process_inputs(self, loader, script):
+        """
+        Extract process inputs using Nextflow's native API.
 
-            method = expr.getMethod()
-            if str(method.getText()) != 'process':
-                continue
+        This replaces the heuristic-based AST parsing approach with
+        Nextflow's official process metadata API.
 
-            # Found process() call, get its arguments
-            args = expr.getArguments()
-            for arg in args:
-                arg_class = arg.getClass().getName()
-                if 'MethodCallExpression' not in arg_class:
-                    continue
+        Args:
+            loader: ScriptLoader instance (after parse() has been called)
+            script: Script object returned by loader.getScript()
 
-                # This is the process name call (e.g., SAMTOOLS_VIEW(...))
-                samtools_args = arg.getArguments()
-                for samtools_arg in samtools_args:
-                    samtools_arg_class = samtools_arg.getClass().getName()
-                    if 'ClosureExpression' in samtools_arg_class:
-                        return samtools_arg
-
-        return None
-
-    def _parse_inputs_from_ast(self, script_path):
-        """Parse .nf file using Groovy AST to extract input channel definitions."""
+        Returns:
+            List of input channel definitions:
+            [{'type': str, 'params': [{'type': str, 'name': str}]}]
+        """
         try:
-            nf_content = script_path.read_text()
+            # Set as module to avoid workflow execution
+            loader.setModule(True)
 
-            # Configure compiler
-            config = self.CompilerConfiguration()
-            config.setScriptBaseClass("nextflow.script.BaseScript")
-            classLoader = self.GroovyClassLoader()
-            unit = self.CompilationUnit(config, None, classLoader)
-            unit.addSource(str(script_path), nf_content)
-            unit.compile(self.Phases.CONVERSION)
+            # Run script to register process definitions
+            # May fail due to missing params, but processes are registered
+            try:
+                loader.runScript()
+            except Exception:
+                pass  # Expected - processes are already registered
 
-            # Get the AST
-            ast = unit.getAST()
-            modules = ast.getModules()
-            module = modules[0]
-            classes = module.getClasses()
-            cls_node = classes[0]
+            # Get script metadata and process names
+            script_meta = self.ScriptMeta.get(script)
+            process_names = script_meta.getProcessNames()
 
-            # Find the run() method
-            run_method = None
-            for method in cls_node.getMethods():
-                if str(method.getName()) == 'run':
-                    run_method = method
-                    break
-
-            if not run_method:
-                print("DEBUG: No run() method found")
+            if not process_names or len(process_names) == 0:
+                print("DEBUG: No processes found in script")
                 return []
 
-            # Get statements from run()
-            code = run_method.getCode()
-            if not hasattr(code, 'getStatements'):
-                print("DEBUG: run() doesn't have statements")
-                return []
+            # Extract inputs from all processes
+            # Most nf-core modules have only one process
+            all_inputs = []
+            for process_name in process_names:
+                process_def = script_meta.getProcess(process_name)
+                inputs = self._extract_process_inputs(process_def)
+                all_inputs.extend(inputs)
 
-            run_statements = code.getStatements()
-
-            # Find the process closure
-            process_closure = self._find_process_closure(run_statements)
-            if not process_closure:
-                print("DEBUG: Could not find process closure")
-                return []
-
-            # Get statements from the closure
-            closure_code = process_closure.getCode()
-            statements = closure_code.getStatements()
-
-            # Extract input channels
-            input_methods = {'tuple', 'val', 'path', 'file', 'env', 'stdin', 'each'}
-            input_channels = []
-            found_output = False
-
-            for stmt in statements:
-                stmt_class = stmt.getClass().getName()
-                if 'ExpressionStatement' not in stmt_class:
-                    continue
-
-                expr = stmt.getExpression()
-                expr_class = expr.getClass().getName()
-                if 'MethodCallExpression' not in expr_class:
-                    continue
-
-                method = expr.getMethod()
-                method_text = str(method.getText())
-
-                # Check if we've reached outputs
-                args = expr.getArguments()
-                for arg in args:
-                    if not hasattr(arg, 'getClass'):
-                        continue
-                    if 'MapExpression' not in arg.getClass().getName():
-                        continue
-
-                    entries = arg.getMapEntryExpressions()
-                    for entry in entries:
-                        key = entry.getKeyExpression()
-                        if hasattr(key, 'getText') and str(key.getText()) == 'emit':
-                            found_output = True
-                            break
-
-                if found_output:
-                    break
-
-                # Check if it's an input method
-                if method_text in input_methods:
-                    params = self._extract_input_params(expr)
-                    channel_info = {
-                        'type': method_text,
-                        'params': params
-                    }
-                    input_channels.append(channel_info)
-
-            return input_channels
+            return all_inputs
 
         except Exception as e:
-            print(f"DEBUG: Error parsing inputs from AST: {e}")
+            print(f"DEBUG: Error extracting inputs from native API: {e}")
             import traceback
             traceback.print_exc()
             return []
