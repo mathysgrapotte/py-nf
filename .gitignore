@@ -21,3 +21,7 @@ work/
 # nf-core modules cache
 nf-core-modules/
 nf_core_list_cache/
+
+# pynf-agent workspace
+agent_workspace/
+*.gz
