@@ -1,4 +1,5 @@
 import os
+import logging
 import jpype
 import jpype.imports
 from pathlib import Path
@@ -7,6 +8,9 @@ from pynf.input_validation import InputValidator
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 
 def validate_meta_map(meta: dict, required_fields: list[str] = None):
@@ -71,32 +75,28 @@ class _WorkflowOutputCollector:
         return None
 
     def onTaskComplete(self, event):
-        print(f"DEBUG: onTaskComplete called")
+        logger.debug("onTaskComplete called")
         try:
             # Use getHandler() method instead of .handler attribute
             handler = event.getHandler()
             task = handler.getTask()
             workdir = str(task.getWorkDir())
-            print(f"DEBUG: Task workDir: {workdir}")
+            logger.debug(f"Task workDir: {workdir}")
             self._task_workdirs.append(workdir)
         except Exception as e:
-            print(f"DEBUG: Error getting workDir: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error getting workDir: {e}")
 
     def onTaskCached(self, event):
-        print(f"DEBUG: onTaskCached called")
+        logger.debug("onTaskCached called")
         try:
             # Use getHandler() method instead of .handler attribute
             handler = event.getHandler()
             task = handler.getTask()
             workdir = str(task.getWorkDir())
-            print(f"DEBUG: Task workDir: {workdir}")
+            logger.debug(f"Task workDir: {workdir}")
             self._task_workdirs.append(workdir)
         except Exception as e:
-            print(f"DEBUG: Error getting workDir: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error getting workDir: {e}")
 
     def onFlowError(self, event):
         return None
@@ -173,7 +173,7 @@ class NextflowEngine:
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, inputs=None, config=None, docker_config=None):
+    def execute(self, script_path, executor="local", params=None, inputs=None, config=None, docker_config=None, verbose=False):
         """
         Execute a Nextflow script with optional Docker configuration.
 
@@ -190,7 +190,34 @@ class NextflowEngine:
                 - registryOverride (bool): Force override registry in fully qualified image names
                 - remove (bool): Auto-remove container after execution (default: True)
                 - runOptions (str): Additional docker run options
+            verbose: Enable verbose debug output (default: False)
         """
+        # Configure Python logging level
+        if verbose:
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(levelname)s: %(message)s',
+                force=True  # Override any existing config
+            )
+        else:
+            logging.basicConfig(
+                level=logging.WARNING,
+                format='%(levelname)s: %(message)s',
+                force=True
+            )
+
+        # Configure Java/Nextflow logging level
+        if not verbose:
+            try:
+                LoggerFactory = jpype.JClass("org.slf4j.LoggerFactory")
+                Level = jpype.JClass("ch.qos.logback.classic.Level")
+
+                context = LoggerFactory.getILoggerFactory()
+                root_logger = context.getLogger("ROOT")
+                root_logger.setLevel(Level.WARN)
+            except Exception:
+                pass  # If logging config fails, just continue
+
         # Create session with config
         session = self.Session()
 
@@ -218,27 +245,27 @@ class NextflowEngine:
 
         # Extract input channels using Nextflow native API
         input_channels = self._get_process_inputs(loader, script)
-        print(f"DEBUG: Discovered input channels: {input_channels}")
+        logger.debug(f"Discovered input channels: {input_channels}")
 
         # Validate and map inputs to session.params
         if inputs:
             # Validate inputs against expected structure
             InputValidator.validate_inputs(inputs, input_channels)
-            print(f"DEBUG: Validation passed, setting params for {len(inputs)} input groups")
+            logger.debug(f"Validation passed, setting params for {len(inputs)} input groups")
             self._set_params_from_inputs(session, input_channels, inputs)
-            print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
+            logger.debug(f"Session params after setting: {dict(session.getParams())}")
 
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
         observer_registered = self._register_output_observer(session, observer_proxy)
-        print(f"DEBUG: Observer registered: {observer_registered}")
+        logger.debug(f"Observer registered: {observer_registered}")
 
         # Execute the script
         try:
             loader.runScript()
             session.fireDataflowNetwork(False)
             session.await_()
-            print(f"DEBUG: After await, collected {len(collector.task_workdirs())} workdirs")
+            logger.debug(f"After await, collected {len(collector.task_workdirs())} workdirs")
         finally:
             if observer_registered:
                 self._unregister_output_observer(session, observer_proxy)
@@ -371,7 +398,7 @@ class NextflowEngine:
             process_names = script_meta.getProcessNames()
 
             if not process_names or len(process_names) == 0:
-                print("DEBUG: No processes found in script")
+                logger.debug("No processes found in script")
                 return []
 
             # Extract inputs from all processes
@@ -385,9 +412,7 @@ class NextflowEngine:
             return all_inputs
 
         except Exception as e:
-            print(f"DEBUG: Error extracting inputs from native API: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error extracting inputs from native API: {e}")
             return []
 
     def _set_params_from_inputs(self, session, input_channels, inputs):

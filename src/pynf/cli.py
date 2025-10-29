@@ -315,6 +315,11 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
     default="local",
     help="Nextflow executor (local, slurm, etc.). Defaults to 'local'.",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose debug output.",
+)
 @pass_context
 def run(
     ctx: CLIContext,
@@ -323,6 +328,7 @@ def run(
     params: Optional[str],
     docker: bool,
     executor: str,
+    verbose: bool,
 ):
     """Run an nf-core module.
 
@@ -383,6 +389,7 @@ def run(
                 docker_enabled=docker,
                 cache_dir=ctx.cache_dir,
                 github_token=ctx.github_token,
+                verbose=verbose,
             )
 
         # Display results

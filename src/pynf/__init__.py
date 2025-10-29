@@ -17,7 +17,7 @@ __all__ = [
     'validate_meta_map',
 ]
 
-def run_module(nf_file, inputs=None, params=None, executor="local", docker_config=None):
+def run_module(nf_file, inputs=None, params=None, executor="local", docker_config=None, verbose=False):
     """
     Simple one-liner module execution.
 
@@ -28,6 +28,7 @@ def run_module(nf_file, inputs=None, params=None, executor="local", docker_confi
         params: Parameters to pass to the script
         executor: Executor type (default: "local")
         docker_config: Docker configuration dict
+        verbose: Enable verbose debug output (default: False)
 
     Returns:
         NextflowResult object
@@ -39,7 +40,8 @@ def run_module(nf_file, inputs=None, params=None, executor="local", docker_confi
         executor=executor,
         params=params,
         inputs=inputs,
-        docker_config=docker_config
+        docker_config=docker_config,
+        verbose=verbose
     )
 
 def read_output_file(file_path):

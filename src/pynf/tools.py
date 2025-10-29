@@ -242,6 +242,7 @@ def run_nfcore_module(
     docker_enabled: bool = False,
     cache_dir: Optional[Path] = None,
     github_token: Optional[str] = None,
+    verbose: bool = False,
 ):
     """
     Run an nf-core module with automatic download if needed.
@@ -255,6 +256,7 @@ def run_nfcore_module(
         docker_enabled: Enable Docker execution
         cache_dir: Directory to cache modules
         github_token: Optional GitHub token
+        verbose: Enable verbose debug output (default: False)
 
     Returns:
         NextflowResult object from execution
@@ -286,4 +288,5 @@ def run_nfcore_module(
         params=params,
         executor=executor,
         docker_config=docker_config,
+        verbose=verbose,
     )
