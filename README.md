@@ -1,6 +1,12 @@
 # py-nf
 
-Run Nextflow modules directly from Python while keeping access to the full set of runtime signals that Nextflow exposes. This repository wraps the Nextflow JVM classes with [JPype](https://jpype.readthedocs.io) and layers a small Python API on top that:
+Run Nextflow modules directly from Python while keeping access to the full set of runtime signals that Nextflow exposes. This repository wraps the Nextflow JVM classes with [JPype](https://jpype.readthedocs.io) and layers a small Python API on top.
+
+**Three ways to use py-nf:**
+
+1. **Python API** - Direct programmatic control over Nextflow execution
+2. **CLI Tools** - Command-line interface for managing and running nf-core modules
+3. **AI Agent** - Natural language interface powered by LLMs for bioinformatics workflows
 
 ```python
 from pynf import run_module; run_module("nextflow_scripts/file-output-process.nf")
@@ -10,7 +16,23 @@ Behind that one-liner the library:
 
 * Loads `.nf` scripts and modules without rewriting them.
 * Executes them inside a real `nextflow.Session`.
-* Collects `WorkflowOutputEvent` / `FilePublishEvent` records so Python receives the same outputs that the CLI would publish.
+* Collects `WorkflowOutputEvent` / `FilePublishEvent` records so Python receives the same outputs that the CLI would publish.
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Nextflow Setup](#nextflow-setup)
+- [Installation & test drive](#installation--test-drive)
+- [Quick start](#quick-start)
+- [CLI Tools](#cli-tools)
+- [Agentic Framework](#agentic-framework)
+- [API tour](#api-tour)
+- [Output collection details](#output-collection-details)
+- [Working with raw modules](#working-with-raw-modules-nf-without-workflow-)
+- [Caveats & tips](#caveats--tips)
+- [Extending the library](#extending-the-library)
+- [Further reading](#further-reading)
+- [Manual Setup](#manual-setup)
 
 
 ## Prerequisites
@@ -84,6 +106,299 @@ assert any(Path(p).name == "output.txt" for p in result.get_output_files())
 ```
 
 
+## CLI Tools
+
+The `pynf` command-line interface provides easy access to nf-core modules without writing Python code.
+
+### Installation
+
+After running `uv sync`, the `pynf` command is available:
+
+```bash
+pynf --help
+```
+
+### Global Options
+
+- `--cache-dir <path>` - Directory to cache modules (default: `./nf-core-modules`)
+- `--github-token <token>` - GitHub personal access token for higher API rate limits (can also use `GITHUB_TOKEN` env var)
+
+### Commands
+
+#### `list-modules-cmd` - List available nf-core modules
+
+```bash
+pynf list-modules-cmd
+
+# Limit output
+pynf list-modules-cmd --limit 50
+
+# Show GitHub API rate limit status
+pynf list-modules-cmd --rate-limit
+```
+
+#### `list-submodules` - List submodules for a specific module
+
+```bash
+pynf list-submodules samtools
+pynf list-submodules bcftools
+```
+
+#### `download` - Download an nf-core module
+
+```bash
+pynf download fastqc
+
+# Force re-download even if cached
+pynf download fastqc --force
+```
+
+#### `list-inputs` - Show input parameters from meta.yml
+
+```bash
+pynf list-inputs fastqc
+
+# Output as JSON
+pynf list-inputs fastqc --json
+```
+
+#### `inspect` - Inspect a module's metadata and code
+
+```bash
+pynf inspect fastqc
+
+# JSON output
+pynf inspect fastqc --json
+```
+
+#### `run` - Execute an nf-core module
+
+```bash
+# Basic execution
+pynf run fastqc --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]'
+
+# With parameters
+pynf run fastqc \
+  --inputs '[{"meta": {"id": "sample1"}, "reads": ["data/sample.fastq"]}]' \
+  --params '{"quality_threshold": 20}'
+
+# Enable Docker (recommended for nf-core modules)
+pynf run fastqc \
+  --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]' \
+  --docker
+
+# Verbose output for debugging
+pynf run fastqc \
+  --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]' \
+  --verbose
+
+# Use different executor
+pynf run fastqc \
+  --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]' \
+  --executor slurm
+```
+
+**Input format:** The `--inputs` parameter must be a JSON list of dictionaries. Each dictionary represents one input channel group with keys matching the module's input specification.
+
+**Common input patterns:**
+- Single-end reads: `[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]`
+- Paired-end reads: `[{"meta": {"id": "sample1"}, "reads": ["R1.fastq", "R2.fastq"]}]`
+- BAM files: `[{"meta": {"id": "sample1"}, "input": ["sample.bam"], "index": []}]`
+
+
+## Agentic Framework
+
+The `pynf-agent` provides an AI-powered conversational interface for bioinformatics workflows. Ask questions in natural language and let the agent discover, configure, and execute nf-core modules for you.
+
+### Overview
+
+The agent combines:
+- **OpenRouter** - Access to various LLM providers (Claude, GPT-4, etc.)
+- **smolagents** - Lightweight agentic framework from HuggingFace
+- **LiteLLM** - Unified interface for LLM APIs
+- **pynf** - Nextflow execution engine
+
+The agent can autonomously:
+- Search for appropriate nf-core modules
+- Inspect module requirements and metadata
+- Execute workflows with proper inputs
+- Track execution history
+- Read and analyze output files
+- Search the web for bioinformatics information
+
+### Prerequisites
+
+1. **OpenRouter API key** - Sign up at [openrouter.ai](https://openrouter.ai)
+
+```bash
+export OPENROUTER_API_KEY='your-key-here'
+# Or add to .env file in your project directory
+```
+
+2. **Optional dependencies** (for web search)
+
+```bash
+uv add duckduckgo-search
+```
+
+### Interactive CLI Usage
+
+Start the interactive agent:
+
+```bash
+pynf-agent
+```
+
+**Options:**
+- `--model <model>` - OpenRouter model to use (default: `anthropic/claude-3.5-sonnet`)
+- `--workspace <path>` - Working directory for outputs (default: `./agent_workspace`)
+- `--verbose` - Enable verbose output
+
+**Example session:**
+
+```bash
+$ pynf-agent
+
+┌─────────────────────────────────────────────────────────────────┐
+│ # pynf-agent                                                    │
+│                                                                 │
+│ **Interactive AI Assistant for Bioinformatics Workflows**      │
+│                                                                 │
+│ Powered by Nextflow + OpenRouter + smollagents                 │
+│                                                                 │
+│ Type your requests in natural language and the agent will:     │
+│ - Search for and download nf-core modules                      │
+│ - Execute bioinformatics workflows                             │
+│ - Inspect outputs and results                                  │
+│ - Search the web for information                               │
+│                                                                 │
+│ Type 'exit' or 'quit' to end the session.                      │
+└─────────────────────────────────────────────────────────────────┘
+
+✓ Agent initialized
+  Model: anthropic/claude-3.5-sonnet
+  Workspace: /home/user/project/agent_workspace
+
+> Run quality control analysis on my fastq file.
+
+Agent:
+I'll help you run quality control analysis on your FASTQ file. Let me search
+for the appropriate tool and execute it.
+
+[Agent automatically:]
+1. Lists available nf-core modules
+2. Identifies fastqc as the appropriate tool
+3. Downloads and inspects the fastqc module
+4. Asks you for the file path
+5. Executes fastqc with proper inputs
+6. Reports the results and output files
+
+Output files:
+  - /path/to/work/sample_fastqc.html
+  - /path/to/work/sample_fastqc.zip
+
+> What's in the HTML report?
+
+[Agent reads and summarizes the HTML file]
+
+> exit
+```
+
+### Programmatic Usage
+
+You can also use the agent programmatically in Python scripts:
+
+```python
+from pynf_agent import BioinformaticsAgent
+from pynf_agent.tools import (
+    WebSearchTool,
+    ListNFCoreModulesTool,
+    ListSubmodulesTool,
+    GetModuleInfoTool,
+    RunNFModuleTool,
+    ListOutputFilesTool,
+    ReadFileTool,
+    ListDirectoryTool,
+)
+
+# Initialize agent
+agent = BioinformaticsAgent(
+    working_dir="./my_workspace"
+)
+
+# Get session context
+context = agent.get_context()
+
+# Initialize tools
+tools = [
+    WebSearchTool(),
+    ListNFCoreModulesTool(),
+    ListSubmodulesTool(),
+    GetModuleInfoTool(),
+    RunNFModuleTool(session_context=context),
+    ListOutputFilesTool(session_context=context),
+    ReadFileTool(),
+    ListDirectoryTool(),
+]
+
+# Set tools
+agent.set_tools(tools)
+
+# Send queries
+response = agent.chat("List available nf-core modules")
+print(response)
+
+response = agent.chat("What submodules are available for samtools?")
+print(response)
+
+# Check execution history
+summary = context.get_execution_summary()
+print(f"Total executions: {summary['total_executions']}")
+print(f"Successful: {summary['successful']}")
+```
+
+**See also:** `examples/agent_demo.py` for a complete programmatic usage example.
+
+### Available Agent Tools
+
+The agent has access to 8 specialized tools:
+
+1. **web_search** - Search the web for bioinformatics information, protocols, troubleshooting
+2. **list_nfcore_modules** - Discover available nf-core modules
+3. **list_submodules** - List submodules within a specific module (e.g., samtools/view, samtools/sort)
+4. **get_module_info** - Download and inspect module metadata, inputs, outputs, and requirements
+5. **run_nf_module** - Execute a Nextflow module with specified inputs and parameters (Docker enabled by default)
+6. **list_output_files** - List output files from previous executions
+7. **read_file** - Read and inspect file contents (useful for reports, logs)
+8. **list_directory** - Explore directory contents to find input files
+
+### Session Context and Execution Tracking
+
+The agent maintains a session context that tracks:
+- All module executions (successful and failed)
+- Input parameters used
+- Output files generated
+- Execution timestamps
+- Error messages
+
+This allows the agent to:
+- Reference outputs from previous executions
+- Chain workflows together
+- Provide execution summaries
+- Debug failures
+
+### Supported Models
+
+Any OpenRouter-supported model can be used. Recommended models:
+
+- `anthropic/claude-3.5-sonnet` (default) - Best for complex workflows
+- `anthropic/claude-3-haiku` - Faster, more economical
+- `openai/gpt-4-turbo` - Alternative high-quality option
+- `meta-llama/llama-3.1-70b-instruct` - Open source option
+
+Specify with `--model` flag or in the `BioinformaticsAgent` constructor.
+
+
 ## API tour
 
 ### `pynf.NextflowEngine`
@@ -103,7 +418,7 @@ Execution sequence inside `execute`:
 5. A custom `TraceObserverV2` proxy (`_WorkflowOutputCollector`) is appended to `session.observersV2` so we capture `WorkflowOutputEvent` and `FilePublishEvent` callbacks.
 6. `loader.runScript()` executes the Groovy stub. For raw modules (no `workflow {}`) Nextflow automatically emits a workflow block for the single entry process — no extra handling is required.
 7. `session.fireDataflowNetwork(False)` ignites the dataflow network, mirroring what the CLI does.
-8. `session.await_()` (Nextflow’s async await) blocks until all tasks finish.
+8. `session.await_()` (Nextflow's async await) blocks until all tasks finish.
 9. The observer is removed to avoid leaking proxies between runs.
 
 ### `pynf.NextflowResult`
@@ -127,8 +442,8 @@ Returned by `NextflowEngine.execute`. Important accessors:
 
 * **Primary signal** – `onWorkflowOutput` provides the values emitted by `emit:` blocks and named workflow outputs.
 * **Secondary signal** – `onFilePublish` captures files that Nextflow publishes or that a process declares as `output: path`. Both callbacks arrive with Java objects (often nested lists/maps of `java.nio.file.Path`).
-* **Flattening rules** – `_flatten_paths` walks nested Python & Java containers and yields string paths. Strings are treated as leaf nodes so we don’t iterate character-by-character, and Java collections/iterables are handled via their respective iterators.
-* **Fallback** – If neither event produced paths (e.g. a custom plugin suppressed them), we fall back to scanning the work directory and return every non-hidden file under each task’s execution folder. This mirrors the earlier prototype behaviour and guarantees backwards compatibility, even if it is noisier.
+* **Flattening rules** – `_flatten_paths` walks nested Python & Java containers and yields string paths. Strings are treated as leaf nodes so we don't iterate character-by-character, and Java collections/iterables are handled via their respective iterators.
+* **Fallback** – If neither event produced paths (e.g. a custom plugin suppressed them), we fall back to scanning the work directory and return every non-hidden file under each task's execution folder. This mirrors the earlier prototype behaviour and guarantees backwards compatibility, even if it is noisier.
 
 
 ## Working with raw modules (.nf without `workflow {}`)
@@ -189,4 +504,3 @@ If you prefer to set up Nextflow manually instead of using the automated script:
    ```
 
 Happy hacking! 🚀
-
