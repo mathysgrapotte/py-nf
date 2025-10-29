@@ -18,28 +18,27 @@ from . import tools
 console = Console()
 
 
-def _get_specs_from_group(input_group):
-    """Extract all specs from an input group (handles nested lists/dicts)."""
-    if type(input_group) is dict:
-        yield input_group
-    elif type(input_group) is list:
-        for item in input_group:
-            yield from _get_specs_from_group(item)
-
-
 def _format_input_group_table(group_idx: int, input_group) -> Table:
-    """Create a table for an input group."""
-    table = Table(title=f"Input Group {group_idx + 1}", show_header=True, header_style="bold blue")
-    table.add_column("Parameter", style="cyan")
-    table.add_column("Type", style="yellow")
-    table.add_column("Description", style="green")
+    """
+    Create a table for an input channel from native API format.
 
-    specs = [s for s in _get_specs_from_group(input_group)]
-    for param_spec in specs:
-        for param_name, param_info in param_spec.items():
-            param_type = param_info.get("type", "") if type(param_info) is dict else ""
-            desc = param_info.get("description", "") if type(param_info) is dict else ""
-            table.add_row(param_name, param_type, desc)
+    Input format: {'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}, ...]}
+    """
+    channel_type = input_group.get('type', 'unknown')
+    params = input_group.get('params', [])
+
+    table = Table(
+        title=f"Input Channel {group_idx + 1} (type: {channel_type})",
+        show_header=True,
+        header_style="bold blue"
+    )
+    table.add_column("Parameter Name", style="cyan")
+    table.add_column("Parameter Type", style="yellow")
+
+    for param in params:
+        param_name = param.get('name', 'unknown')
+        param_type = param.get('type', 'unknown')
+        table.add_row(param_name, param_type)
 
     return table
 
@@ -294,22 +293,16 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
 @cli.command()
 @click.argument("module")
 @click.option(
-    "--input",
-    "input_files",
-    multiple=True,
-    help="Input files to pass to the module.",
+    "--inputs",
+    type=str,
+    default=None,
+    help="Inputs as JSON string. Format: '[{\"param1\": \"value1\"}, {\"param2\": \"value2\"}]'",
 )
 @click.option(
     "--params",
     type=str,
     default=None,
     help="Parameters as JSON string or key=value pairs.",
-)
-@click.option(
-    "--meta",
-    type=str,
-    default=None,
-    help="Metadata as JSON string (required for nf-core modules).",
 )
 @click.option(
     "--docker",
@@ -322,22 +315,27 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
     default="local",
     help="Nextflow executor (local, slurm, etc.). Defaults to 'local'.",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose debug output.",
+)
 @pass_context
 def run(
     ctx: CLIContext,
     module: str,
-    input_files: tuple,
+    inputs: Optional[str],
     params: Optional[str],
-    meta: Optional[str],
     docker: bool,
     executor: str,
+    verbose: bool,
 ):
     """Run an nf-core module.
 
     Automatically downloads the module if not present locally.
 
     Example:
-        pynf run fastqc --input sample.fastq --meta '{"id": "sample1"}'
+        pynf run fastqc --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]'
     """
     try:
         # Parse parameters
@@ -360,40 +358,38 @@ def run(
                 console.print(f"[red]Error parsing parameters: {e}[/red]")
                 raise click.Abort()
 
-        # Parse metadata
-        parsed_meta = {}
-        if meta:
+        # Parse inputs
+        parsed_inputs = None
+        if inputs:
             try:
-                parsed_meta = json.loads(meta)
+                parsed_inputs = json.loads(inputs)
+                if not isinstance(parsed_inputs, list):
+                    console.print(f"[red]Error: inputs must be a JSON list of dicts[/red]")
+                    raise click.Abort()
             except json.JSONDecodeError as e:
-                console.print(f"[red]Error parsing metadata (must be valid JSON): {e}[/red]")
+                console.print(f"[red]Error parsing inputs (must be valid JSON list): {e}[/red]")
                 raise click.Abort()
-
-        # Prepare input files list
-        input_list = list(input_files) if input_files else None
 
         # Display execution info
         console.print(f"\n[bold green]Running module: {module}[/bold green]")
         console.print(f"[cyan]Executor: {executor}[/cyan]")
-        if input_list:
-            console.print(f"[cyan]Inputs: {input_list}[/cyan]")
+        if parsed_inputs:
+            console.print(f"[cyan]Inputs: {parsed_inputs}[/cyan]")
         if parsed_params:
             console.print(f"[cyan]Params: {parsed_params}[/cyan]")
-        if parsed_meta:
-            console.print(f"[cyan]Meta: {parsed_meta}[/cyan]")
         console.print()
 
         # Run the module
         with console.status("[bold green]Executing..."):
             result = tools.run_nfcore_module(
                 module,
-                input_files=input_list,
+                inputs=parsed_inputs,
                 params=parsed_params,
-                meta=parsed_meta,
                 executor=executor,
                 docker_enabled=docker,
                 cache_dir=ctx.cache_dir,
                 github_token=ctx.github_token,
+                verbose=verbose,
             )
 
         # Display results

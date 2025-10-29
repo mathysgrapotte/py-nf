@@ -1,11 +1,16 @@
 import os
+import logging
 import jpype
 import jpype.imports
 from pathlib import Path
 from dotenv import load_dotenv
+from pynf.input_validation import InputValidator
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 
 def validate_meta_map(meta: dict, required_fields: list[str] = None):
@@ -70,32 +75,28 @@ class _WorkflowOutputCollector:
         return None
 
     def onTaskComplete(self, event):
-        print(f"DEBUG: onTaskComplete called")
+        logger.debug("onTaskComplete called")
         try:
             # Use getHandler() method instead of .handler attribute
             handler = event.getHandler()
             task = handler.getTask()
             workdir = str(task.getWorkDir())
-            print(f"DEBUG: Task workDir: {workdir}")
+            logger.debug(f"Task workDir: {workdir}")
             self._task_workdirs.append(workdir)
         except Exception as e:
-            print(f"DEBUG: Error getting workDir: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error getting workDir: {e}")
 
     def onTaskCached(self, event):
-        print(f"DEBUG: onTaskCached called")
+        logger.debug("onTaskCached called")
         try:
             # Use getHandler() method instead of .handler attribute
             handler = event.getHandler()
             task = handler.getTask()
             workdir = str(task.getWorkDir())
-            print(f"DEBUG: Task workDir: {workdir}")
+            logger.debug(f"Task workDir: {workdir}")
             self._task_workdirs.append(workdir)
         except Exception as e:
-            print(f"DEBUG: Error getting workDir: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error getting workDir: {e}")
 
     def onFlowError(self, event):
         return None
@@ -166,12 +167,13 @@ class NextflowEngine:
         self.Session = jpype.JClass("nextflow.Session")
         self.Channel = jpype.JClass("nextflow.Channel")
         self.TraceObserverV2 = jpype.JClass("nextflow.trace.TraceObserverV2")
+        self.ScriptMeta = jpype.JClass("nextflow.script.ScriptMeta")
 
     def load_script(self, nf_file_path):
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, input_files=None, config=None, docker_config=None, meta=None):
+    def execute(self, script_path, executor="local", params=None, inputs=None, config=None, docker_config=None, verbose=False):
         """
         Execute a Nextflow script with optional Docker configuration.
 
@@ -179,7 +181,8 @@ class NextflowEngine:
             script_path: Path to the Nextflow script
             executor: Executor type (default: "local")
             params: Parameters to pass to the script
-            input_files: Input files for the script
+            inputs: List of dicts, each dict contains parameter names and values for one input channel.
+                   Example: [{'meta': {...}, 'input': 'file.bam'}, {'fasta': 'ref.fa'}]
             config: Additional configuration
             docker_config: Docker configuration options:
                 - enabled (bool): Enable Docker execution
@@ -187,8 +190,34 @@ class NextflowEngine:
                 - registryOverride (bool): Force override registry in fully qualified image names
                 - remove (bool): Auto-remove container after execution (default: True)
                 - runOptions (str): Additional docker run options
-            meta: Metadata map for nf-core modules (e.g., {'id': 'sample1', 'single_end': False})
+            verbose: Enable verbose debug output (default: False)
         """
+        # Configure Python logging level
+        if verbose:
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(levelname)s: %(message)s',
+                force=True  # Override any existing config
+            )
+        else:
+            logging.basicConfig(
+                level=logging.WARNING,
+                format='%(levelname)s: %(message)s',
+                force=True
+            )
+
+        # Configure Java/Nextflow logging level
+        if not verbose:
+            try:
+                LoggerFactory = jpype.JClass("org.slf4j.LoggerFactory")
+                Level = jpype.JClass("ch.qos.logback.classic.Level")
+
+                context = LoggerFactory.getILoggerFactory()
+                root_logger = context.getLogger("ROOT")
+                root_logger.setLevel(Level.WARN)
+            except Exception:
+                pass  # If logging config fails, just continue
+
         # Create session with config
         session = self.Session()
 
@@ -208,33 +237,35 @@ class NextflowEngine:
             for key, value in params.items():
                 session.getBinding().setVariable(key, value)
 
-        # Parse input parameter names from .nf file before loading script
-        param_names = self._parse_input_names_from_file(script_path)
-        print(f"DEBUG: Discovered param names: {param_names}")
-
-        # Map our Python inputs to session.params for standalone process execution
-        if param_names and (meta or input_files):
-            print(f"DEBUG: Setting params - meta: {meta is not None}, input_files: {input_files is not None}")
-            self._set_params_from_inputs(session, param_names, meta, input_files)
-            print(f"DEBUG: Session params after setting: {dict(session.getParams())}")
-
         # Parse and load the script
         loader = self.ScriptLoaderFactory.create(session)
         java_path = jpype.java.nio.file.Paths.get(str(script_path))
         loader.parse(java_path)
         script = loader.getScript()
 
+        # Extract input channels using Nextflow native API
+        input_channels = self._get_process_inputs(loader, script)
+        logger.debug(f"Discovered input channels: {input_channels}")
+
+        # Validate and map inputs to session.params
+        if inputs:
+            # Validate inputs against expected structure
+            InputValidator.validate_inputs(inputs, input_channels)
+            logger.debug(f"Validation passed, setting params for {len(inputs)} input groups")
+            self._set_params_from_inputs(session, input_channels, inputs)
+            logger.debug(f"Session params after setting: {dict(session.getParams())}")
+
         collector = _WorkflowOutputCollector()
         observer_proxy = jpype.JProxy(self.TraceObserverV2, inst=collector)
         observer_registered = self._register_output_observer(session, observer_proxy)
-        print(f"DEBUG: Observer registered: {observer_registered}")
+        logger.debug(f"Observer registered: {observer_registered}")
 
         # Execute the script
         try:
             loader.runScript()
             session.fireDataflowNetwork(False)
             session.await_()
-            print(f"DEBUG: After await, collected {len(collector.task_workdirs())} workdirs")
+            logger.debug(f"After await, collected {len(collector.task_workdirs())} workdirs")
         finally:
             if observer_registered:
                 self._unregister_output_observer(session, observer_proxy)
@@ -293,79 +324,165 @@ class NextflowEngine:
         if "remove" in docker_config:
             docker_map.put("remove", docker_config["remove"])
 
-    def _parse_input_names_from_file(self, script_path):
-        """Parse .nf file text to extract input parameter names."""
-        import re
+    def _extract_tuple_components(self, inp):
+        """Extract components from a tuple input parameter."""
+        components = []
+        inner = inp.getInner()
 
+        for component in inner:
+            components.append({
+                'type': str(component.getTypeName()),
+                'name': str(component.getName())
+            })
+
+        return components
+
+    def _extract_simple_param(self, inp):
+        """Extract a simple (non-tuple) input parameter."""
+        return {
+            'type': str(inp.getTypeName()),
+            'name': str(inp.getName())
+        }
+
+    def _build_channel_info(self, inp):
+        """Build channel info dict from an input parameter."""
+        channel_info = {
+            'type': str(inp.getTypeName()),
+            'params': []
+        }
+
+        # Handle tuple inputs
+        if hasattr(inp, 'getInner') and inp.getInner() is not None:
+            channel_info['params'] = self._extract_tuple_components(inp)
+        else:
+            # Simple input (val, path, etc.)
+            channel_info['params'].append(self._extract_simple_param(inp))
+
+        return channel_info
+
+    def _extract_process_inputs(self, process_def):
+        """Extract all inputs from a process definition."""
+        process_config = process_def.getProcessConfig()
+        inputs = process_config.getInputs()
+
+        return [self._build_channel_info(inp) for inp in inputs]
+
+    def _get_process_inputs(self, loader, script):
+        """
+        Extract process inputs using Nextflow's native API.
+
+        This replaces the heuristic-based AST parsing approach with
+        Nextflow's official process metadata API.
+
+        Args:
+            loader: ScriptLoader instance (after parse() has been called)
+            script: Script object returned by loader.getScript()
+
+        Returns:
+            List of input channel definitions:
+            [{'type': str, 'params': [{'type': str, 'name': str}]}]
+        """
         try:
-            with open(script_path, 'r') as f:
-                content = f.read()
+            # Set as module to avoid workflow execution
+            loader.setModule(True)
 
-            # Find input: section in process
-            input_pattern = r'input:\s*\n(.*?)(?:\n\s*output:|\n\s*script:|\n\s*when:|\n\s*exec:)'
-            input_match = re.search(input_pattern, content, re.DOTALL)
+            # Run script to register process definitions
+            # May fail due to missing params, but processes are registered
+            try:
+                loader.runScript()
+            except Exception:
+                pass  # Expected - processes are already registered
 
-            if not input_match:
-                print("DEBUG: No input: section found")
+            # Get script metadata and process names
+            script_meta = self.ScriptMeta.get(script)
+            process_names = script_meta.getProcessNames()
+
+            if not process_names or len(process_names) == 0:
+                logger.debug("No processes found in script")
                 return []
 
-            input_section = input_match.group(1)
-            print(f"DEBUG: Found input section:\n{input_section}")
+            # Extract inputs from all processes
+            # Most nf-core modules have only one process
+            all_inputs = []
+            for process_name in process_names:
+                process_def = script_meta.getProcess(process_name)
+                inputs = self._extract_process_inputs(process_def)
+                all_inputs.extend(inputs)
 
-            param_names = []
-
-            # Extract parameter names from input declarations
-            # Handles: val(name), path(name), tuple val(x), path(y)
-            tuple_pattern = r'tuple\s+(.+)'
-            simple_pattern = r'(?:val|path|file|env|stdin)\s*\(\s*(\w+)\s*\)'
-
-            for line in input_section.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-
-                # Check for tuple input
-                tuple_match = re.search(tuple_pattern, line)
-                if tuple_match:
-                    tuple_content = tuple_match.group(1)
-                    # Extract all parameter names from tuple
-                    for match in re.finditer(simple_pattern, tuple_content):
-                        param_names.append(match.group(1))
-                else:
-                    # Check for simple input
-                    simple_match = re.search(simple_pattern, line)
-                    if simple_match:
-                        param_names.append(simple_match.group(1))
-
-            print(f"DEBUG: Parsed param names: {param_names}")
-            return param_names
+            return all_inputs
 
         except Exception as e:
-            print(f"DEBUG: Error parsing input names: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error extracting inputs from native API: {e}")
             return []
 
-    def _set_params_from_inputs(self, session, param_names, meta, input_files):
-        """Map meta and input_files to session.params using discovered parameter names."""
+    def _set_params_from_inputs(self, session, input_channels, inputs):
+        """
+        Map user inputs to session.params using discovered input channels.
+
+        Args:
+            session: Nextflow session
+            input_channels: List of expected input channel structures from .nf script
+            inputs: List of dicts, each dict contains parameter names and values for one input channel
+        """
         HashMap = jpype.JClass("java.util.HashMap")
         params_obj = session.getParams()
 
-        if not param_names:
+        if not input_channels or not inputs:
             return
 
-        # Set meta to first param if provided
-        if meta and len(param_names) > 0:
-            meta_map = HashMap()
-            for key, value in meta.items():
-                meta_map.put(key, value)
-            params_obj.put(param_names[0], meta_map)
+        # Iterate through each input group and set parameters
+        for input_dict, channel_info in zip(inputs, input_channels):
+            channel_params = channel_info.get('params', [])
 
-        # Set input_files to second param if provided
-        if input_files and len(param_names) > 1:
-            files = input_files if isinstance(input_files, list) else [input_files]
-            file_value = str(files[0]) if len(files) == 1 else ",".join(str(f) for f in files)
-            params_obj.put(param_names[1], file_value)
+            # For each parameter in this channel, set its value in session.params
+            for param_info in channel_params:
+                param_name = param_info['name']
+                param_type = param_info['type']
+
+                if param_name not in input_dict:
+                    continue
+
+                param_value = input_dict[param_name]
+
+                # Convert Python value to appropriate Java type
+                java_value = self._convert_to_java_type(param_value, param_type)
+                params_obj.put(param_name, java_value)
+
+    def _convert_to_java_type(self, value, param_type):
+        """
+        Convert Python value to appropriate Java type based on parameter type.
+
+        Args:
+            value: Python value to convert
+            param_type: Parameter type (val, path, etc.)
+
+        Returns:
+            Java object suitable for Nextflow
+        """
+        HashMap = jpype.JClass("java.util.HashMap")
+
+        # Handle None
+        if value is None:
+            return None
+
+        # Handle dict (meta maps)
+        if isinstance(value, dict):
+            meta_map = HashMap()
+            for key, val in value.items():
+                meta_map.put(key, val)
+            return meta_map
+
+        # Handle lists (multiple files, etc.)
+        if isinstance(value, list):
+            # Convert to comma-separated string for file paths
+            return ",".join(str(v) for v in value)
+
+        # For path types, convert to string
+        if param_type == 'path':
+            return str(value)
+
+        # For val types, return as-is (let JPype handle conversion)
+        return value
 
     # ------------------------------------------------------------------
     def _register_output_observer(self, session, observer):

@@ -59,13 +59,18 @@ def test_fastqc_with_docker():
     test_dir, fastq_file = create_test_fastq()
     print(f"    Test file: {fastq_file}")
 
-    # Step 3: Prepare meta map
-    print("\n[3/5] Preparing meta map...")
-    meta = {
-        'id': 'test_sample_001',
-        'single_end': True
-    }
-    print(f"    Meta map: {meta}")
+    # Step 3: Prepare inputs (new multi-input format)
+    print("\n[3/5] Preparing inputs...")
+    inputs = [
+        {
+            'meta': {
+                'id': 'test_sample_001',
+                'single_end': True
+            },
+            'reads': [str(fastq_file)]
+        }
+    ]
+    print(f"    Inputs: {inputs}")
 
     # Step 4: Configure Docker
     print("\n[4/5] Configuring Docker...")
@@ -84,8 +89,7 @@ def test_fastqc_with_docker():
         result = engine.execute(
             script_path=module.main_nf,
             executor='local',
-            input_files=[str(fastq_file)],
-            meta=meta,
+            inputs=inputs,
             docker_config=docker_config
         )
 

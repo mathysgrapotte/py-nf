@@ -135,12 +135,9 @@ def get_module_inputs(
     github_token: Optional[str] = None,
 ) -> list[Dict[str, Any]]:
     """
-    Extract and return the input field from a module's meta.yml.
+    Extract input parameters from a module's main.nf using Nextflow native API.
 
     If module is not cached locally, it will be downloaded.
-
-    The input section in nf-core modules is structured as a list of input groups,
-    where each group is a list of input parameters with their specifications.
 
     Args:
         module: Module name
@@ -148,29 +145,50 @@ def get_module_inputs(
         github_token: Optional GitHub token for rate limiting
 
     Returns:
-        List of input groups, where each group is a list of input parameter specs.
-        Each spec is a dict with keys like 'meta', 'reads', etc. containing type and description.
+        List of input channel definitions:
+        [{'type': str, 'params': [{'type': str, 'name': str}]}]
 
     Raises:
-        ValueError: If module cannot be downloaded, inspected, or input field is missing
+        ValueError: If module cannot be downloaded or inputs cannot be extracted
     """
+    import jpype
+    from .engine import NextflowEngine
+
     manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
 
     # Ensure module is cached
     nf_module = manager.download_module(module)
 
-    # Read and parse meta.yml
+    # Create engine and extract inputs using native API
     try:
-        meta_content = nf_module.meta_yml.read_text()
-        meta_dict = yaml.safe_load(meta_content)
+        engine = NextflowEngine()
+
+        # Set up Nextflow session
+        Session = jpype.JClass("nextflow.Session")
+        ScriptFile = jpype.JClass("nextflow.script.ScriptFile")
+        ArrayList = jpype.JClass("java.util.ArrayList")
+
+        session = Session()
+        script_file = ScriptFile(jpype.java.nio.file.Paths.get(str(nf_module.main_nf)))
+        session.init(script_file, ArrayList(), None, None)
+        session.start()
+
+        # Load and parse script
+        loader = engine.ScriptLoaderFactory.create(session)
+        java_path = jpype.java.nio.file.Paths.get(str(nf_module.main_nf))
+        loader.parse(java_path)
+        script = loader.getScript()
+
+        # Extract inputs using native API
+        inputs = engine._get_process_inputs(loader, script)
+
+        # Cleanup
+        session.destroy()
+
+        return inputs
+
     except Exception as e:
-        raise ValueError(f"Failed to parse meta.yml: {e}")
-
-    # Extract inputs section
-    if not meta_dict or "input" not in meta_dict:
-        raise ValueError(f"Module '{module}' has no 'input' field in meta.yml")
-
-    return meta_dict["input"]
+        raise ValueError(f"Failed to extract inputs from main.nf: {e}")
 
 
 def module_exists_locally(
@@ -218,26 +236,27 @@ def get_rate_limit_status(
 
 def run_nfcore_module(
     module: str,
-    input_files: Optional[list] = None,
+    inputs: Optional[list] = None,
     params: Optional[Dict[str, Any]] = None,
-    meta: Optional[Dict[str, Any]] = None,
     executor: str = "local",
     docker_enabled: bool = False,
     cache_dir: Optional[Path] = None,
     github_token: Optional[str] = None,
+    verbose: bool = False,
 ):
     """
     Run an nf-core module with automatic download if needed.
 
     Args:
         module: Module name (e.g., 'fastqc')
-        input_files: List of input files
+        inputs: List of dicts, each dict contains parameter names and values for one input channel
+               Example: [{'meta': {...}, 'reads': ['file1.fastq', 'file2.fastq']}]
         params: Dictionary of parameters
-        meta: Metadata dictionary (required for nf-core modules)
         executor: Nextflow executor type (default: 'local')
         docker_enabled: Enable Docker execution
         cache_dir: Directory to cache modules
         github_token: Optional GitHub token
+        verbose: Enable verbose debug output (default: False)
 
     Returns:
         NextflowResult object from execution
@@ -245,7 +264,7 @@ def run_nfcore_module(
     Raises:
         ValueError: If module cannot be found/downloaded
     """
-    from . import run_module
+    from pynf import run_module
 
     # Download module if not cached
     nf_module = download_module(
@@ -265,9 +284,9 @@ def run_nfcore_module(
     # Execute the module
     return run_module(
         str(nf_module.main_nf),
-        input_files=input_files,
+        inputs=inputs,
         params=params,
         executor=executor,
         docker_config=docker_config,
-        meta=meta,
+        verbose=verbose,
     )

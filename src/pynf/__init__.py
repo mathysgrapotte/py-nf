@@ -17,17 +17,18 @@ __all__ = [
     'validate_meta_map',
 ]
 
-def run_module(nf_file, input_files=None, params=None, executor="local", docker_config=None, meta=None):
+def run_module(nf_file, inputs=None, params=None, executor="local", docker_config=None, verbose=False):
     """
     Simple one-liner module execution.
 
     Args:
         nf_file: Path to Nextflow script
-        input_files: Input files for the script
+        inputs: List of dicts, each dict contains parameter names and values for one input channel
+               Example: [{'meta': {...}, 'input': 'file.bam'}, {'fasta': 'ref.fa'}]
         params: Parameters to pass to the script
         executor: Executor type (default: "local")
         docker_config: Docker configuration dict
-        meta: Meta map for nf-core modules
+        verbose: Enable verbose debug output (default: False)
 
     Returns:
         NextflowResult object
@@ -38,9 +39,9 @@ def run_module(nf_file, input_files=None, params=None, executor="local", docker_
         script_path,
         executor=executor,
         params=params,
-        input_files=input_files,
+        inputs=inputs,
         docker_config=docker_config,
-        meta=meta
+        verbose=verbose
     )
 
 def read_output_file(file_path):
