@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from pynf_agent.tools import (
-    WebSearchTool,
     ListNFCoreModulesTool,
     ListSubmodulesTool,
     GetModuleInfoTool,
@@ -72,22 +71,6 @@ def test_get_module_info():
     # Test with fastqc
     print("\n[1] Getting info for fastqc:")
     result = tool.forward("fastqc")
-    print(result)
-
-    print("\n✓ Test passed")
-
-
-def test_web_search():
-    """Test web search tool."""
-    print("\n" + "=" * 70)
-    print("TEST: WebSearchTool")
-    print("=" * 70)
-
-    tool = WebSearchTool()
-
-    # Test search
-    print("\n[1] Searching for 'fastqc quality control':")
-    result = tool.forward("fastqc quality control")
     print(result)
 
     print("\n✓ Test passed")
@@ -156,7 +139,6 @@ def main():
         ("List Submodules", test_list_submodules),
         ("Get Module Info", test_get_module_info),
         ("List Directory", test_list_directory),
-        ("Web Search", test_web_search),
     ]
 
     failed = []

@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from pynf_agent import BioinformaticsAgent
 from pynf_agent.tools import (
-    WebSearchTool,
     ListNFCoreModulesTool,
     ListSubmodulesTool,
     GetModuleInfoTool,
@@ -52,7 +51,6 @@ def main():
 
     # Initialize tools
     tools = [
-        WebSearchTool(),
         ListNFCoreModulesTool(),
         ListSubmodulesTool(),
         GetModuleInfoTool(),

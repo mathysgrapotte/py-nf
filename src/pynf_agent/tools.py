@@ -15,51 +15,6 @@ import pynf
 from pynf import tools as pynf_tools
 
 
-class WebSearchTool(Tool):
-    """Searches the web for information."""
-
-    name = "web_search"
-    description = """
-    Searches the web for information using DuckDuckGo.
-
-    Use this to find information about bioinformatics tools, file formats,
-    protocols, parameters, or to troubleshoot errors.
-
-    Input:
-    - query: Search query string
-    """
-    inputs = {
-        "query": {
-            "type": "string",
-            "description": "Search query"
-        }
-    }
-    output_type = "string"
-
-    def forward(self, query: str) -> str:
-        """Perform web search."""
-        try:
-            from duckduckgo_search import DDGS
-
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=5))
-
-            if not results:
-                return f"No results found for: {query}"
-
-            output = f"Search results for '{query}':\n\n"
-            for i, result in enumerate(results, 1):
-                output += f"{i}. {result['title']}\n"
-                output += f"   {result['href']}\n"
-                output += f"   {result['body']}\n\n"
-
-            return output
-        except ImportError:
-            return "Error: duckduckgo-search package not installed. Install with: pip install duckduckgo-search"
-        except Exception as e:
-            return f"Error performing search: {e}"
-
-
 class ListNFCoreModulesTool(Tool):
     """Lists available nf-core modules that can be downloaded and executed."""
 
