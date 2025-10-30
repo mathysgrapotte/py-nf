@@ -11,7 +11,6 @@ from rich.markdown import Markdown
 
 from .agent import BioinformaticsAgent
 from .tools import (
-    WebSearchTool,
     ListNFCoreModulesTool,
     ListSubmodulesTool,
     GetModuleInfoTool,
@@ -37,7 +36,6 @@ Type your requests in natural language and the agent will:
 - Search for and download nf-core modules
 - Execute bioinformatics workflows
 - Inspect outputs and results
-- Search the web for information
 
 Type 'exit' or 'quit' to end the session.
 """
@@ -97,7 +95,6 @@ def main(model: str, workspace: str, verbose: bool):
 
             # Initialize tools with session context
             tools = [
-                WebSearchTool(),
                 ListNFCoreModulesTool(),
                 ListSubmodulesTool(),
                 GetModuleInfoTool(),
