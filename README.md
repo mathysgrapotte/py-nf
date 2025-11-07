@@ -1,8 +1,8 @@
-# py-nf
+# pynextflow
 
 Run Nextflow modules directly from Python while keeping access to the full set of runtime signals that Nextflow exposes. This repository wraps the Nextflow JVM classes with [JPype](https://jpype.readthedocs.io) and layers a small Python API on top.
 
-**Three ways to use py-nf:**
+**Three ways to use pynextflow:**
 
 1. **Python API** - Direct programmatic control over Nextflow execution
 2. **CLI Tools** - Command-line interface for managing and running nf-core modules
