@@ -290,3 +290,21 @@ def run_nfcore_module(
         docker_config=docker_config,
         verbose=verbose,
     )
+
+
+def get_ast(file_path: str | Path) -> Dict[str, Any]:
+    """
+    Extract the full AST from a Nextflow file.
+
+    Args:
+        file_path: Path to .nf file
+
+    Returns:
+        Dictionary representation of the complete Groovy AST
+
+    Raises:
+        ValueError: If file cannot be parsed
+    """
+    from pynf.ast import parse_nf_file
+
+    return parse_nf_file(file_path)
