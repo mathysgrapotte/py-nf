@@ -132,31 +132,26 @@ class _WorkflowOutputCollector:
 
 class NextflowEngine:
     def __init__(self, nextflow_jar_path=None):
-        # Use provided path, or environment variable, or default
+        # Priority:
+        # 1. Explicit path argument
+        # 2. NEXTFLOW_JAR_PATH environment variable
+        # 3. Auto-setup (download to ~/.pynf/)
+
         if nextflow_jar_path is None:
-            nextflow_jar_path = os.getenv(
-                "NEXTFLOW_JAR_PATH",
-                "nextflow/build/releases/nextflow-25.10.0-one.jar"
-            )
+            nextflow_jar_path = os.getenv("NEXTFLOW_JAR_PATH")
+
+        if nextflow_jar_path is None:
+            # Auto-setup: download JAR if not present
+            from pynf.setup import ensure_nextflow_ready
+            nextflow_jar_path = str(ensure_nextflow_ready())
 
         # Check if JAR file exists
         jar_path = Path(nextflow_jar_path)
         if not jar_path.exists():
-            error_msg = (
-                f"\n{'='*70}\n"
-                f"ERROR: Nextflow JAR not found at: {nextflow_jar_path}\n"
-                f"{'='*70}\n\n"
-                f"This project requires a Nextflow fat JAR to run.\n\n"
-                f"To set up Nextflow automatically, run:\n"
-                f"    python setup_nextflow.py\n\n"
-                f"This will clone and build Nextflow for you.\n\n"
-                f"Alternatively, you can set up manually:\n"
-                f"1. Clone: git clone https://github.com/nextflow-io/nextflow.git\n"
-                f"2. Build: cd nextflow && make pack\n"
-                f"3. Update .env with the JAR path\n"
-                f"{'='*70}\n"
+            raise FileNotFoundError(
+                f"Nextflow JAR not found at: {nextflow_jar_path}\n"
+                "Run 'from pynf.setup import download_nextflow_jar; download_nextflow_jar()' to download."
             )
-            raise FileNotFoundError(error_msg)
 
         # Start JVM with Nextflow classpath
         if not jpype.isJVMStarted():

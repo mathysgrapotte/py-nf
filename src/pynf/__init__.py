@@ -5,6 +5,13 @@ from .nfcore import (
     NFCoreModule,
     NFCoreModuleManager
 )
+from .setup import (
+    ensure_nextflow_ready,
+    download_nextflow_jar,
+    get_jar_path,
+    get_pynf_home,
+    DEFAULT_VERSION,
+)
 
 __all__ = [
     'NextflowEngine',
@@ -15,6 +22,11 @@ __all__ = [
     'NFCoreModule',
     'NFCoreModuleManager',
     'validate_meta_map',
+    'ensure_nextflow_ready',
+    'download_nextflow_jar',
+    'get_jar_path',
+    'get_pynf_home',
+    'DEFAULT_VERSION',
 ]
 
 def run_module(nf_file, inputs=None, params=None, executor="local", docker_config=None, verbose=False):
