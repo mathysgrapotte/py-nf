@@ -84,6 +84,23 @@ uv run pytest tests/test_integration.py::test_file_output_process_outputs_output
 
 You should see `output.txt` captured in Python without tunnelling through the work directory.
 
+### Module test data (samtools/view)
+
+The samtools/view validation and verbose scripts expect local input files in the
+repo root. The files are gitignored so you can download them on demand:
+
+```bash
+curl -fL -o test.bam "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam"
+curl -fL -o test.bam.bai "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam.bai"
+curl -fL -o reference.fa "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/homo_sapiens/genome/genome.fasta"
+printf "read1\n" > readnames.txt
+```
+
+These inputs are used by:
+
+- `tests/test_multi_input_validation.py`
+- `tests/test_verbose_mode.py`
+
 
 ## Quick start
 
