@@ -13,10 +13,11 @@ from rich.table import Table
 from datetime import datetime
 
 from . import tools
+from .cli_parsing import parse_inputs_option, parse_params_option
+from .cli_rendering import input_group_table, modules_table
 
 # Create a rich console for pretty printing
 console = Console()
-
 
 def _format_input_group_table(group_idx: int, input_group) -> Table:
     """
@@ -24,23 +25,7 @@ def _format_input_group_table(group_idx: int, input_group) -> Table:
 
     Input format: {'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}, ...]}
     """
-    channel_type = input_group.get('type', 'unknown')
-    params = input_group.get('params', [])
-
-    table = Table(
-        title=f"Input Channel {group_idx + 1} (type: {channel_type})",
-        show_header=True,
-        header_style="bold blue"
-    )
-    table.add_column("Parameter Name", style="cyan")
-    table.add_column("Parameter Type", style="yellow")
-
-    for param in params:
-        param_name = param.get('name', 'unknown')
-        param_type = param.get('type', 'unknown')
-        table.add_row(param_name, param_type)
-
-    return table
+    return input_group_table(group_idx, input_group)
 
 
 class CLIContext:
@@ -97,18 +82,8 @@ def list_modules_cmd(ctx: CLIContext, limit: Optional[int], rate_limit: bool):
             console.print("[yellow]No modules found.[/yellow]")
             return
 
-        # Create and display table
-        table = Table(title="Available nf-core Modules", show_header=True, header_style="bold magenta")
-        table.add_column("Module Name", style="cyan")
-        table.add_column("Type", style="green")
-
         display_modules = modules[:limit] if limit else modules
-
-        for module in display_modules:
-            # Simple heuristic: modules with '/' are likely submodules of a larger tool
-            module_type = "sub-module" if "/" in module else "top-level"
-            table.add_row(module, module_type)
-
+        table = modules_table(modules, limit=limit)
         console.print(table)
 
         # Show count
@@ -338,37 +313,11 @@ def run(
         pynf run fastqc --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]'
     """
     try:
-        # Parse parameters
-        parsed_params = {}
-        if params:
-            try:
-                # Try JSON first
-                if params.startswith("{"):
-                    parsed_params = json.loads(params)
-                else:
-                    # Parse key=value pairs
-                    for pair in params.split(","):
-                        key, value = pair.strip().split("=")
-                        # Try to parse value as JSON, else keep as string
-                        try:
-                            parsed_params[key] = json.loads(value)
-                        except json.JSONDecodeError:
-                            parsed_params[key] = value
-            except Exception as e:
-                console.print(f"[red]Error parsing parameters: {e}[/red]")
-                raise click.Abort()
-
-        # Parse inputs
-        parsed_inputs = None
-        if inputs:
-            try:
-                parsed_inputs = json.loads(inputs)
-                if not isinstance(parsed_inputs, list):
-                    console.print(f"[red]Error: inputs must be a JSON list of dicts[/red]")
-                    raise click.Abort()
-            except json.JSONDecodeError as e:
-                console.print(f"[red]Error parsing inputs (must be valid JSON list): {e}[/red]")
-                raise click.Abort()
+        try:
+            parsed_params = parse_params_option(params)
+            parsed_inputs = parse_inputs_option(inputs)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Error parsing JSON input: {exc}") from exc
 
         # Display execution info
         console.print(f"\n[bold green]Running module: {module}[/bold green]")
@@ -407,6 +356,9 @@ def run(
             for output in workflow_outputs:
                 console.print(f"  • {output['name']}: {output['value']}")
 
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise click.Abort()
     except Exception as e:
         console.print(f"[red]Error running module: {e}[/red]", style="bold")
         raise click.Abort()
