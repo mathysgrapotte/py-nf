@@ -4,13 +4,17 @@ Backend tools for nf-core module management.
 Provides convenient wrappers around NFCoreModuleManager for common tasks.
 """
 
-import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 import yaml
 
-from .nfcore import NFCoreModuleManager, NFCoreModule
-
+from .nfcore import (
+    NFCoreModule,
+    download_module as download_nfcore_module,
+    get_rate_limit_status as get_nfcore_rate_limit_status,
+    list_available_modules,
+    list_available_submodules,
+)
 
 def list_modules(cache_dir: Optional[Path] = None, github_token: Optional[str] = None) -> list[str]:
     """
@@ -23,8 +27,7 @@ def list_modules(cache_dir: Optional[Path] = None, github_token: Optional[str] =
     Returns:
         Sorted list of module names
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.list_available_modules()
+    return list_available_modules(cache_dir, github_token)
 
 
 def list_submodules(
@@ -43,8 +46,8 @@ def list_submodules(
     Returns:
         Sorted list of submodule names
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.list_submodules(module)
+    # Submodule listing does not require a cache dir.
+    return list_available_submodules(module, github_token)
 
 
 def download_module(
@@ -68,8 +71,12 @@ def download_module(
     Raises:
         ValueError: If module doesn't exist or download fails
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.download_module(module, force=force)
+    return download_nfcore_module(
+        module,
+        cache_dir=cache_dir,
+        github_token=github_token,
+        force=force,
+    )
 
 
 def inspect_module(
@@ -98,17 +105,15 @@ def inspect_module(
     Raises:
         ValueError: If module cannot be downloaded or inspected
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-
     # Ensure module is cached
-    nf_module = manager.download_module(module)
+    nf_module = download_module(module, cache_dir=cache_dir, github_token=github_token)
 
     # Read and parse meta.yml
     try:
         meta_content = nf_module.meta_yml.read_text()
         meta_dict = yaml.safe_load(meta_content)
-    except Exception as e:
-        raise ValueError(f"Failed to parse meta.yml: {e}")
+    except Exception as exc:
+        raise ValueError(f"Failed to parse meta.yml: {exc}") from exc
 
     # Read main.nf
     try:
@@ -116,8 +121,8 @@ def inspect_module(
         main_lines = main_content.split("\n")
         main_preview = main_lines[:20]
         main_line_count = len(main_lines)
-    except Exception as e:
-        raise ValueError(f"Failed to read main.nf: {e}")
+    except Exception as exc:
+        raise ValueError(f"Failed to read main.nf: {exc}") from exc
 
     return {
         "name": module,
@@ -154,10 +159,10 @@ def get_module_inputs(
     import jpype
     from .engine import NextflowEngine
 
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
+    manager = _manager(cache_dir=cache_dir, github_token=github_token)
 
     # Ensure module is cached
-    nf_module = manager.download_module(module)
+    nf_module = download_module(module, cache_dir=cache_dir, github_token=github_token)
 
     # Create engine and extract inputs using native API
     try:
@@ -230,8 +235,7 @@ def get_rate_limit_status(
     Raises:
         ValueError: If GitHub API request fails
     """
-    manager = NFCoreModuleManager(github_token=github_token)
-    return manager.get_rate_limit_status()
+    return get_nfcore_rate_limit_status(github_token)
 
 
 def run_nfcore_module(
