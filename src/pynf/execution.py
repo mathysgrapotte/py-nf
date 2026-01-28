@@ -36,8 +36,8 @@ def execute_nextflow(
     """
     jar_path = resolve_nextflow_jar_path(nextflow_jar_path)
     assert_nextflow_jar_exists(jar_path)
-    configure_logging(request.verbose)
     start_jvm_if_needed(jar_path)
+    configure_logging(request.verbose)
 
     classes = load_nextflow_classes()
     ScriptLoaderFactory = classes["ScriptLoaderFactory"]

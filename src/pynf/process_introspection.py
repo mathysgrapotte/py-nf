@@ -23,7 +23,7 @@ def get_process_inputs(
         ``params`` keys.
 
     Raises:
-        Exception: If the script cannot be executed for introspection.
+        Exception: If the script cannot be parsed for introspection.
     """
     script_loader.setModule(True)
 
@@ -31,7 +31,12 @@ def get_process_inputs(
     process_names = script_meta.getProcessNames()
 
     if not process_names:
-        script_loader.runScript()
+        was_module = script_meta.isModule()
+        script_meta.setModule(True)
+        try:
+            script_loader.runScript()
+        finally:
+            script_meta.setModule(was_module)
         process_names = script_meta.getProcessNames()
 
     if not process_names:
