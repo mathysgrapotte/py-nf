@@ -10,7 +10,7 @@ def test_verbose_mode():
     print("VERBOSE MODE TEST")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     inputs = [
         {'meta': {'id': 'sample1'}, 'input': 'test.bam', 'index': 'test.bam.bai'},

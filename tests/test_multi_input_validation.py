@@ -18,7 +18,7 @@ def test_correct_inputs():
     print("TEST 1: Correct inputs (4 groups)")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     # Correct inputs matching the 4 input channels
     inputs = [
@@ -65,7 +65,7 @@ def test_missing_input_group():
     print("TEST 2: Missing input group (only 3 groups provided)")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     # Only 3 groups - missing the 4th
     inputs = [
@@ -94,7 +94,7 @@ def test_missing_parameter():
     print("TEST 3: Missing parameter in group 1")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     # Group 1 missing 'index' parameter
     inputs = [
@@ -123,7 +123,7 @@ def test_extra_parameter():
     print("TEST 4: Extra parameter in group 1")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     # Group 1 has an extra parameter
     inputs = [
@@ -152,7 +152,7 @@ def test_too_many_groups():
     print("TEST 5: Too many input groups (5 instead of 4)")
     print("="*70)
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
 
     # 5 groups instead of 4
     inputs = [

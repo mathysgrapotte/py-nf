@@ -12,7 +12,7 @@ def test_native_api_input_extraction():
     """Test native API input extraction using NextflowEngine."""
 
     # Test with samtools/view module
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
     print(f"Testing with: {script_path}")
     print("=" * 70)
 
