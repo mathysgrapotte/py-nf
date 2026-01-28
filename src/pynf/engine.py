@@ -1,10 +1,16 @@
-import os
 import logging
+from pathlib import Path
+
 import jpype
 import jpype.imports
-from pathlib import Path
 from dotenv import load_dotenv
 from pynf.input_validation import InputValidator
+from pynf.runtime_config import (
+    assert_nextflow_jar_exists,
+    configure_logging,
+    resolve_nextflow_jar_path,
+)
+from pynf.validation import validate_meta_map as _validate_meta_map
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,33 +18,9 @@ load_dotenv()
 # Set up logger for this module
 logger = logging.getLogger(__name__)
 
-
 def validate_meta_map(meta: dict, required_fields: list[str] = None):
-    """
-    Validate meta map contains required fields.
-
-    Args:
-        meta: Meta map dictionary
-        required_fields: List of required field names
-
-    Raises:
-        ValueError: If required fields are missing
-
-    Example:
-        >>> validate_meta_map({'id': 'sample1'}, required_fields=['id'])
-        >>> validate_meta_map({'name': 'test'}, required_fields=['id'])
-        ValueError: Missing required meta field: id
-    """
-    if required_fields is None:
-        required_fields = ['id']  # 'id' is always required
-
-    missing_fields = [field for field in required_fields if field not in meta]
-
-    if missing_fields:
-        raise ValueError(
-            f"Missing required meta fields: {', '.join(missing_fields)}. "
-            f"Meta map provided: {meta}"
-        )
+    """Backwards-compatible facade over the pure validation helper."""
+    _validate_meta_map(meta, required_fields)
 
 
 class _WorkflowOutputCollector:
@@ -75,28 +57,10 @@ class _WorkflowOutputCollector:
         return None
 
     def onTaskComplete(self, event):
-        logger.debug("onTaskComplete called")
-        try:
-            # Use getHandler() method instead of .handler attribute
-            handler = event.getHandler()
-            task = handler.getTask()
-            workdir = str(task.getWorkDir())
-            logger.debug(f"Task workDir: {workdir}")
-            self._task_workdirs.append(workdir)
-        except Exception as e:
-            logger.exception(f"Error getting workDir: {e}")
+        self._record_task_workdir(event, "onTaskComplete")
 
     def onTaskCached(self, event):
-        logger.debug("onTaskCached called")
-        try:
-            # Use getHandler() method instead of .handler attribute
-            handler = event.getHandler()
-            task = handler.getTask()
-            workdir = str(task.getWorkDir())
-            logger.debug(f"Task workDir: {workdir}")
-            self._task_workdirs.append(workdir)
-        except Exception as e:
-            logger.exception(f"Error getting workDir: {e}")
+        self._record_task_workdir(event, "onTaskCached")
 
     def onFlowError(self, event):
         return None
@@ -129,40 +93,34 @@ class _WorkflowOutputCollector:
     def task_workdirs(self):
         return list(self._task_workdirs)
 
+    # --- Internal helpers ------------------------------------------------------
+    def _record_task_workdir(self, event, hook_name):
+        logger.debug("%s called", hook_name)
+        try:
+            handler = event.getHandler()
+            task = handler.getTask()
+            workdir = str(task.getWorkDir())
+            logger.debug("Task workDir: %s", workdir)
+            self._task_workdirs.append(workdir)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception("Error getting workDir: %s", exc)
+
 
 class NextflowEngine:
     def __init__(self, nextflow_jar_path=None):
-        # Use provided path, or environment variable, or default
-        if nextflow_jar_path is None:
-            nextflow_jar_path = os.getenv(
-                "NEXTFLOW_JAR_PATH",
-                "nextflow/build/releases/nextflow-25.10.0-one.jar"
-            )
+        jar_path = resolve_nextflow_jar_path(nextflow_jar_path)
+        assert_nextflow_jar_exists(jar_path)
+        self._start_jvm(jar_path)
+        self._load_classes()
 
-        # Check if JAR file exists
-        jar_path = Path(nextflow_jar_path)
-        if not jar_path.exists():
-            error_msg = (
-                f"\n{'='*70}\n"
-                f"ERROR: Nextflow JAR not found at: {nextflow_jar_path}\n"
-                f"{'='*70}\n\n"
-                f"This project requires a Nextflow fat JAR to run.\n\n"
-                f"To set up Nextflow automatically, run:\n"
-                f"    python setup_nextflow.py\n\n"
-                f"This will clone and build Nextflow for you.\n\n"
-                f"Alternatively, you can set up manually:\n"
-                f"1. Clone: git clone https://github.com/nextflow-io/nextflow.git\n"
-                f"2. Build: cd nextflow && make pack\n"
-                f"3. Update .env with the JAR path\n"
-                f"{'='*70}\n"
-            )
-            raise FileNotFoundError(error_msg)
-
-        # Start JVM with Nextflow classpath
+    @staticmethod
+    def _start_jvm(jar_path: Path):
+        """Start the JVM with the Nextflow JAR on the classpath if needed."""
         if not jpype.isJVMStarted():
-            jpype.startJVM(classpath=[nextflow_jar_path])
+            jpype.startJVM(classpath=[str(jar_path)])
 
-        # Import Nextflow classes after JVM is started
+    def _load_classes(self):
+        """Load the Java classes we depend on after the JVM starts."""
         self.ScriptLoaderFactory = jpype.JClass("nextflow.script.ScriptLoaderFactory")
         self.Session = jpype.JClass("nextflow.Session")
         self.Channel = jpype.JClass("nextflow.Channel")
@@ -173,7 +131,21 @@ class NextflowEngine:
         # Return the Path object for script loading
         return Path(nf_file_path)
 
-    def execute(self, script_path, executor="local", params=None, inputs=None, config=None, docker_config=None, verbose=False):
+    @staticmethod
+    def _configure_logging(verbose: bool):
+        """Configure Python and (best-effort) Java logging."""
+        configure_logging(verbose)
+
+    def execute(
+        self,
+        script_path,
+        executor="local",
+        params=None,
+        inputs=None,
+        config=None,
+        docker_config=None,
+        verbose=False,
+    ):
         """
         Execute a Nextflow script with optional Docker configuration.
 
@@ -192,31 +164,7 @@ class NextflowEngine:
                 - runOptions (str): Additional docker run options
             verbose: Enable verbose debug output (default: False)
         """
-        # Configure Python logging level
-        if verbose:
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format='%(levelname)s: %(message)s',
-                force=True  # Override any existing config
-            )
-        else:
-            logging.basicConfig(
-                level=logging.WARNING,
-                format='%(levelname)s: %(message)s',
-                force=True
-            )
-
-        # Configure Java/Nextflow logging level
-        if not verbose:
-            try:
-                LoggerFactory = jpype.JClass("org.slf4j.LoggerFactory")
-                Level = jpype.JClass("ch.qos.logback.classic.Level")
-
-                context = LoggerFactory.getILoggerFactory()
-                root_logger = context.getLogger("ROOT")
-                root_logger.setLevel(Level.WARN)
-            except Exception:
-                pass  # If logging config fails, just continue
+        self._configure_logging(verbose)
 
         # Create session with config
         session = self.Session()
@@ -326,30 +274,19 @@ class NextflowEngine:
 
     def _extract_tuple_components(self, inp):
         """Extract components from a tuple input parameter."""
-        components = []
         inner = inp.getInner()
-
-        for component in inner:
-            components.append({
-                'type': str(component.getTypeName()),
-                'name': str(component.getName())
-            })
-
-        return components
+        return [
+            {"type": str(component.getTypeName()), "name": str(component.getName())}
+            for component in inner
+        ]
 
     def _extract_simple_param(self, inp):
         """Extract a simple (non-tuple) input parameter."""
-        return {
-            'type': str(inp.getTypeName()),
-            'name': str(inp.getName())
-        }
+        return {"type": str(inp.getTypeName()), "name": str(inp.getName())}
 
     def _build_channel_info(self, inp):
         """Build channel info dict from an input parameter."""
-        channel_info = {
-            'type': str(inp.getTypeName()),
-            'params': []
-        }
+        channel_info = {"type": str(inp.getTypeName()), "params": []}
 
         # Handle tuple inputs
         if hasattr(inp, 'getInner') and inp.getInner() is not None:
@@ -364,7 +301,6 @@ class NextflowEngine:
         """Extract all inputs from a process definition."""
         process_config = process_def.getProcessConfig()
         inputs = process_config.getInputs()
-
         return [self._build_channel_info(inp) for inp in inputs]
 
     def _get_process_inputs(self, loader, script):
@@ -424,7 +360,6 @@ class NextflowEngine:
             input_channels: List of expected input channel structures from .nf script
             inputs: List of dicts, each dict contains parameter names and values for one input channel
         """
-        HashMap = jpype.JClass("java.util.HashMap")
         params_obj = session.getParams()
 
         if not input_channels or not inputs:
