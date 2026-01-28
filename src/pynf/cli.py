@@ -1,8 +1,4 @@
-"""
-CLI for py-nf module management using Click and Rich.
-
-Provides user-facing commands for listing, downloading, inspecting and running nf-core modules.
-"""
+"""Click CLI for managing nf-core modules and Nextflow scripts."""
 
 import click
 import json
@@ -12,28 +8,28 @@ from rich.console import Console
 from rich.table import Table
 from datetime import datetime
 
-from . import tools
+from . import api
+from .cli_app import CLIContext
 from .cli_parsing import parse_inputs_option, parse_params_option
 from .cli_rendering import input_group_table, modules_table
+from .module_service import ensure_module
+from .types import DockerConfig, ExecutionRequest
 
 # Create a rich console for pretty printing
 console = Console()
 
-def _format_input_group_table(group_idx: int, input_group) -> Table:
-    """
-    Create a table for an input channel from native API format.
 
-    Input format: {'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}, ...]}
+def _format_input_group_table(group_idx: int, input_group) -> Table:
+    """Format an input channel into a rich table.
+
+    Args:
+        group_idx: Zero-based index of the input channel.
+        input_group: Input channel mapping from native API introspection.
+
+    Returns:
+        Rich table describing the input channel.
     """
     return input_group_table(group_idx, input_group)
-
-
-class CLIContext:
-    """Context object for CLI commands."""
-
-    def __init__(self, cache_dir: Optional[Path] = None, github_token: Optional[str] = None):
-        self.cache_dir = cache_dir
-        self.github_token = github_token
 
 
 pass_context = click.make_pass_decorator(CLIContext)
@@ -54,7 +50,13 @@ pass_context = click.make_pass_decorator(CLIContext)
 )
 @click.pass_context
 def cli(ctx, cache_dir: Optional[str], github_token: Optional[str]):
-    """Nextflow workflow and nf-core module management CLI."""
+    """Entry point for the pynf CLI commands.
+
+    Args:
+        ctx: Click context populated by the command group.
+        cache_dir: Optional cache directory override.
+        github_token: Optional GitHub token for authenticated requests.
+    """
     cache_path = Path(cache_dir) if cache_dir else None
     ctx.obj = CLIContext(cache_dir=cache_path, github_token=github_token)
 
@@ -73,10 +75,19 @@ def cli(ctx, cache_dir: Optional[str], github_token: Optional[str]):
 )
 @pass_context
 def list_modules_cmd(ctx: CLIContext, limit: Optional[int], rate_limit: bool):
-    """List all available nf-core modules."""
+    """List available nf-core modules.
+
+    Args:
+        ctx: Click context containing CLI configuration.
+        limit: Optional number of modules to display.
+        rate_limit: When ``True``, display GitHub API rate limit info.
+    """
     try:
         with console.status("[bold green]Fetching modules..."):
-            modules = tools.list_modules(cache_dir=ctx.cache_dir, github_token=ctx.github_token)
+            cache_dir = ctx.cache_dir or api.DEFAULT_CACHE_DIR
+            modules = api.list_modules(
+                cache_dir=cache_dir, github_token=ctx.github_token
+            )
 
         if not modules:
             console.print("[yellow]No modules found.[/yellow]")
@@ -90,20 +101,28 @@ def list_modules_cmd(ctx: CLIContext, limit: Optional[int], rate_limit: bool):
         total = len(modules)
         shown = len(display_modules)
         if limit and shown < total:
-            console.print(f"\n[yellow]Showing {shown}/{total} modules (use --limit to see more)[/yellow]")
+            console.print(
+                f"\n[yellow]Showing {shown}/{total} modules (use --limit to see more)[/yellow]"
+            )
         else:
             console.print(f"\n[green]Total: {total} modules[/green]")
 
         # Show rate limit if requested
         if rate_limit:
             try:
-                status = tools.get_rate_limit_status(github_token=ctx.github_token)
-                rate_table = Table(title="GitHub API Rate Limit", show_header=True, header_style="bold blue")
+                status = api.get_rate_limit_status(github_token=ctx.github_token)
+                rate_table = Table(
+                    title="GitHub API Rate Limit",
+                    show_header=True,
+                    header_style="bold blue",
+                )
                 rate_table.add_column("Metric", style="cyan")
                 rate_table.add_column("Value", style="green")
                 rate_table.add_row("Limit", str(status["limit"]))
                 rate_table.add_row("Remaining", str(status["remaining"]))
-                reset_time = datetime.fromtimestamp(status["reset_time"]).strftime("%Y-%m-%d %H:%M:%S")
+                reset_time = datetime.fromtimestamp(status["reset_time"]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
                 rate_table.add_row("Reset Time", reset_time)
                 console.print(rate_table)
             except Exception as e:
@@ -120,22 +139,24 @@ def list_modules_cmd(ctx: CLIContext, limit: Optional[int], rate_limit: bool):
 def list_submodules(ctx: CLIContext, module: str):
     """List submodules available in a module.
 
-    Example: pynf list-submodules samtools
+    Args:
+        ctx: Click context containing CLI configuration.
+        module: Parent module identifier.
     """
     try:
         with console.status(f"[bold green]Fetching submodules for '{module}'..."):
-            submodules = tools.list_submodules(
-                module,
-                cache_dir=ctx.cache_dir,
-                github_token=ctx.github_token,
-            )
+            submodules = api.list_submodules(module, github_token=ctx.github_token)
 
         if not submodules:
             console.print(f"[yellow]No submodules found for '{module}'.[/yellow]")
             return
 
         # Create and display table
-        table = Table(title=f"Submodules in '{module}'", show_header=True, header_style="bold magenta")
+        table = Table(
+            title=f"Submodules in '{module}'",
+            show_header=True,
+            header_style="bold magenta",
+        )
         table.add_column("Submodule", style="cyan")
         table.add_column("Full Path", style="green")
 
@@ -160,23 +181,22 @@ def list_submodules(ctx: CLIContext, module: str):
 )
 @pass_context
 def download(ctx: CLIContext, module: str, force: bool):
-    """Download an nf-core module.
+    """Download an nf-core module into the local cache.
 
-    Example: pynf download fastqc
+    Args:
+        ctx: Click context containing CLI configuration.
+        module: Module identifier to download.
+        force: When ``True``, re-download even if cached.
     """
     try:
         with console.status(f"[bold green]Downloading '{module}'..."):
-            nf_module = tools.download_module(
-                module,
-                cache_dir=ctx.cache_dir,
-                force=force,
-                github_token=ctx.github_token,
-            )
+            cache_dir = ctx.cache_dir or api.DEFAULT_CACHE_DIR
+            paths = ensure_module(cache_dir, module, ctx.github_token, force=force)
 
         console.print(f"\n[green]✓ Module downloaded successfully![/green]")
-        console.print(f"  Location: [cyan]{nf_module.local_path}[/cyan]")
-        console.print(f"  main.nf: [cyan]{nf_module.main_nf}[/cyan]")
-        console.print(f"  meta.yml: [cyan]{nf_module.meta_yml}[/cyan]")
+        console.print(f"  Location: [cyan]{paths.module_dir}[/cyan]")
+        console.print(f"  main.nf: [cyan]{paths.main_nf}[/cyan]")
+        console.print(f"  meta.yml: [cyan]{paths.meta_yml}[/cyan]")
 
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]", style="bold")
@@ -196,15 +216,17 @@ def download(ctx: CLIContext, module: str, force: bool):
 )
 @pass_context
 def list_inputs(ctx: CLIContext, module: str, output_json: bool):
-    """List input parameters from a module's meta.yml.
+    """List input parameters from a module's ``main.nf``.
 
-    Example: pynf list-inputs fastqc
+    Args:
+        ctx: Click context containing CLI configuration.
+        module: Module identifier.
+        output_json: When ``True``, emit JSON output.
     """
     with console.status(f"[bold green]Fetching inputs for '{module}'..."):
-        inputs = tools.get_module_inputs(
-            module,
-            cache_dir=ctx.cache_dir,
-            github_token=ctx.github_token,
+        cache_dir = ctx.cache_dir or api.DEFAULT_CACHE_DIR
+        inputs = api.get_module_inputs(
+            module, cache_dir=cache_dir, github_token=ctx.github_token
         )
 
     if output_json:
@@ -231,16 +253,16 @@ def list_inputs(ctx: CLIContext, module: str, output_json: bool):
 def inspect(ctx: CLIContext, module: str, output_json: bool):
     """Inspect a downloaded nf-core module.
 
-    Displays the meta.yml file and module paths.
-
-    Example: pynf inspect fastqc
+    Args:
+        ctx: Click context containing CLI configuration.
+        module: Module identifier.
+        output_json: When ``True``, emit JSON output.
     """
     try:
         with console.status(f"[bold green]Inspecting '{module}'..."):
-            info = tools.inspect_module(
-                module,
-                cache_dir=ctx.cache_dir,
-                github_token=ctx.github_token,
+            cache_dir = ctx.cache_dir or api.DEFAULT_CACHE_DIR
+            info = api.inspect_module(
+                module, cache_dir=cache_dir, github_token=ctx.github_token
             )
 
         if output_json:
@@ -253,12 +275,16 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
             console.print(f"\n[bold cyan]meta.yml:[/bold cyan]")
             console.print(info["meta_raw"])
 
-            console.print(f"\n[bold cyan]main.nf:[/bold cyan] ({info['main_nf_lines']} lines)")
+            console.print(
+                f"\n[bold cyan]main.nf:[/bold cyan] ({info['main_nf_lines']} lines)"
+            )
             # Show preview
             for line in info["main_nf_preview"]:
                 console.print(line)
             if info["main_nf_lines"] > 20:
-                console.print(f"[dim]... ({info['main_nf_lines'] - 20} more lines)[/dim]")
+                console.print(
+                    f"[dim]... ({info['main_nf_lines'] - 20} more lines)[/dim]"
+                )
 
     except Exception as e:
         console.print(f"[red]Error inspecting module: {e}[/red]", style="bold")
@@ -271,7 +297,7 @@ def inspect(ctx: CLIContext, module: str, output_json: bool):
     "--inputs",
     type=str,
     default=None,
-    help="Inputs as JSON string. Format: '[{\"param1\": \"value1\"}, {\"param2\": \"value2\"}]'",
+    help='Inputs as JSON string. Format: \'[{"param1": "value1"}, {"param2": "value2"}]\'',
 )
 @click.option(
     "--params",
@@ -305,12 +331,16 @@ def run(
     executor: str,
     verbose: bool,
 ):
-    """Run an nf-core module.
+    """Run an nf-core module via the Nextflow runtime.
 
-    Automatically downloads the module if not present locally.
-
-    Example:
-        pynf run fastqc --inputs '[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}]'
+    Args:
+        ctx: Click context containing CLI configuration.
+        module: Module identifier.
+        inputs: JSON string describing input groups.
+        params: JSON string or key=value list of parameters.
+        docker: Whether to enable Docker execution.
+        executor: Nextflow executor name.
+        verbose: Enable verbose debug output.
     """
     try:
         try:
@@ -330,15 +360,23 @@ def run(
 
         # Run the module
         with console.status("[bold green]Executing..."):
-            result = tools.run_nfcore_module(
-                module,
-                inputs=parsed_inputs,
-                params=parsed_params,
+            cache_dir = ctx.cache_dir or api.DEFAULT_CACHE_DIR
+            docker_config = None
+            if docker:
+                docker_config = DockerConfig(enabled=True, registry="quay.io")
+            request = ExecutionRequest(
+                script_path=Path(module),
                 executor=executor,
-                docker_enabled=docker,
-                cache_dir=ctx.cache_dir,
-                github_token=ctx.github_token,
+                params=parsed_params,
+                inputs=parsed_inputs,
+                docker=docker_config,
                 verbose=verbose,
+            )
+            result = api.run_module(
+                module,
+                request,
+                cache_dir=cache_dir,
+                github_token=ctx.github_token,
             )
 
         # Display results
@@ -365,7 +403,11 @@ def run(
 
 
 def main():
-    """Main entry point for the CLI."""
+    """Main entry point for the CLI.
+
+    Returns:
+        ``None``. The CLI handles execution and exits the process.
+    """
     cli()
 
 

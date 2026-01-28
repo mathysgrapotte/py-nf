@@ -1,16 +1,27 @@
-"""Rendering helpers for CLI output."""
+"""Rich table renderers for CLI output formatting."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from rich.table import Table
 
 
-def input_group_table(group_idx: int, input_group: Mapping[str, object]) -> Table:
-    """Create a table for an input channel from native API format."""
+def input_group_table(group_idx: int, input_group: Mapping[str, Any]) -> Table:
+    """Build a rich table for a single input channel.
+
+    Args:
+        group_idx: Zero-based index of the input channel.
+        input_group: Mapping describing the channel (``type`` and ``params``).
+
+    Returns:
+        A ``rich.table.Table`` with parameter names and types.
+    """
     channel_type = input_group.get("type", "unknown")
     params = input_group.get("params", [])
+    if not isinstance(params, Sequence):
+        params = []
 
     table = Table(
         title=f"Input Channel {group_idx + 1} (type: {channel_type})",
@@ -29,8 +40,18 @@ def input_group_table(group_idx: int, input_group: Mapping[str, object]) -> Tabl
 
 
 def modules_table(modules: Sequence[str], limit: int | None = None) -> Table:
-    """Create a modules table with optional truncation."""
-    table = Table(title="Available nf-core Modules", show_header=True, header_style="bold magenta")
+    """Render the available modules table.
+
+    Args:
+        modules: Ordered list of module identifiers.
+        limit: Optional number of modules to display.
+
+    Returns:
+        A ``rich.table.Table`` listing module names and their type.
+    """
+    table = Table(
+        title="Available nf-core Modules", show_header=True, header_style="bold magenta"
+    )
     table.add_column("Module Name", style="cyan")
     table.add_column("Type", style="green")
 
