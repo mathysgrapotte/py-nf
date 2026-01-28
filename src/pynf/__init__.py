@@ -1,15 +1,16 @@
 """Public entry points for the pynf package."""
 
 from pathlib import Path
+from collections.abc import Mapping
+from typing import Any
 
 from . import api
-from .engine import NextflowEngine, _coerce_docker_config, validate_meta_map
+from .validation import validate_meta_map
 from .nfcore import NFCoreModule, NFCoreModuleManager, download_nfcore_module
 from .result import NextflowResult
 from .types import DockerConfig, ExecutionRequest
 
 __all__ = [
-    "NextflowEngine",
     "NextflowResult",
     "run_module",
     "run_script",
@@ -116,3 +117,32 @@ def read_output_file(file_path):
         OSError: If the file cannot be read.
     """
     return api.read_output_file(Path(file_path))
+
+
+def _coerce_docker_config(
+    docker_config: Mapping[str, Any] | DockerConfig | None,
+) -> DockerConfig | None:
+    """Normalize docker configuration mappings into ``DockerConfig``.
+
+    Args:
+        docker_config: Docker configuration mapping or dataclass.
+
+    Returns:
+        ``DockerConfig`` instance or ``None``.
+    """
+    if docker_config is None:
+        return None
+    if isinstance(docker_config, DockerConfig):
+        return docker_config
+
+    return DockerConfig(
+        enabled=bool(docker_config.get("enabled", True)),
+        registry=docker_config.get("registry"),
+        registry_override=docker_config.get("registryOverride")
+        if "registryOverride" in docker_config
+        else docker_config.get("registry_override"),
+        remove=docker_config.get("remove"),
+        run_options=docker_config.get("runOptions")
+        if "runOptions" in docker_config
+        else docker_config.get("run_options"),
+    )

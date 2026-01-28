@@ -1,73 +1,62 @@
 #!/usr/bin/env python3
 
-"""
-Integration test for py-nf package
-Tests running a simple Nextflow script from Python
+"""Integration tests for the py-nf package.
+
+These tests validate that we can run a simple Nextflow script from Python and
+capture outputs.
+
+NOTE: This repo intentionally uses the functional API (ExecutionRequest →
+execute_nextflow). The old NextflowEngine wrapper has been removed.
 """
 
 from pathlib import Path
 
-from pynf import NextflowEngine, run_module
+import pytest
 
-def test_basic_engine():
-    """Test basic NextflowEngine functionality"""
-    print("Testing NextflowEngine...")
+from pynf import run_module
+from pynf.execution import execute_nextflow
+from pynf.types import ExecutionRequest
 
-    # Create engine instance
-    engine = NextflowEngine()
 
-    # Load the hello.nf script
-    script_path = engine.load_script("nextflow/tests/hello.nf")
-    print(f"Loaded script path: {script_path}")
+def nextflow_jar_available() -> bool:
+    from pynf.runtime_config import resolve_nextflow_jar_path
+    jar = resolve_nextflow_jar_path(None)
+    return jar.exists()
 
-    # Execute the script
-    print("Executing script...")
-    result = engine.execute(script_path)
 
-    # Print results
-    print(f"Execution report: {result.get_execution_report()}")
-    print(f"Output files: {result.get_output_files()}")
-    print(f"Stdout: {result.get_stdout()}")
 
-    print("✓ Basic engine test completed")
+@pytest.mark.skipif(not nextflow_jar_available(), reason="Nextflow JAR not present; run python setup_nextflow.py")
+def test_basic_execute_nextflow() -> None:
+    """Execute a basic Nextflow script via the functional API."""
 
-def test_convenience_function():
-    """Test the convenience run_module function"""
-    print("\nTesting run_module convenience function...")
+    request = ExecutionRequest(script_path=Path("nextflow/tests/hello.nf"))
+    result = execute_nextflow(request)
 
-    # Use the one-liner
+    report = result.get_execution_report()
+    outputs = result.get_output_files()
+
+    assert isinstance(report, dict)
+    assert isinstance(outputs, list)
+
+
+@pytest.mark.skipif(not nextflow_jar_available(), reason="Nextflow JAR not present; run python setup_nextflow.py")
+def test_convenience_function() -> None:
+    """The convenience run_module wrapper should still work."""
+
     result = run_module("nextflow/tests/hello.nf")
-
-    # Print results
-    print(f"Execution report: {result.get_execution_report()}")
-    print(f"Output files: {result.get_output_files()}")
-
-    print("✓ Convenience function test completed")
+    assert isinstance(result.get_execution_report(), dict)
 
 
-def test_file_output_process_outputs_output_txt():
-    """Ensure file-output-process.nf publishes output.txt"""
+@pytest.mark.skipif(not nextflow_jar_available(), reason="Nextflow JAR not present; run python setup_nextflow.py")
+def test_file_output_process_outputs_output_txt() -> None:
+    """Ensure file-output-process.nf publishes output.txt."""
 
-    engine = NextflowEngine()
-    script_path = engine.load_script("nextflow_scripts/file-output-process.nf")
-    result = engine.execute(script_path)
+    request = ExecutionRequest(script_path=Path("nextflow_scripts/file-output-process.nf"))
+    result = execute_nextflow(request)
 
     outputs = result.get_output_files()
-    print(f"outputs: {outputs}")
-
     assert any(Path(path).name == "output.txt" for path in outputs), outputs
 
-    print("✓ file-output-process produced output.txt")
 
 if __name__ == "__main__":
-    print("=== py-nf Integration Test ===\n")
-
-    try:
-        test_basic_engine()
-        test_convenience_function()
-        test_file_output_process_outputs_output_txt()
-        print("\n🎉 All tests passed!")
-    except Exception as e:
-        print(f"\n❌ Test failed: {e}")
-        import traceback
-        traceback.print_exc()
+    raise SystemExit("Run with pytest")

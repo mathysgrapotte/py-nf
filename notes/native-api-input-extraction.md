@@ -294,7 +294,7 @@ Both are supported by the native API approach.
 
 ## Next Steps
 
-1. Add ScriptMeta import in `NextflowEngine.__init__()`:
+1. (Historical) This section referenced `NextflowEngine.__init__()`; the repo now uses the functional API. The equivalent change is in `pynf.jvm_bridge.load_nextflow_classes()` / `execute_nextflow()`.
    ```python
    self.ScriptMeta = jpype.JClass("nextflow.script.ScriptMeta")
    ```

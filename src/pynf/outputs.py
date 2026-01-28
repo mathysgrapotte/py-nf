@@ -166,12 +166,19 @@ def _iter_visible_files(workdir: str) -> Iterator[str]:
 def _is_java_path_like(obj: Any) -> bool:
     """Return ``True`` when the object is a Java path or file.
 
+    This helper is used both during real runs (when the JVM is started) and in
+    tests that operate on pure Python structures. When the JVM is not running we
+    must return ``False`` rather than attempting to resolve Java classes.
+
     Args:
         obj: Candidate object.
 
     Returns:
         ``True`` if the object looks like a Java path or file.
     """
+    if not jpype.isJVMStarted():  # type: ignore[attr-defined]
+        return False
+
     java_path = jpype.JClass("java.nio.file.Path")
     if isinstance(obj, java_path):
         return True
