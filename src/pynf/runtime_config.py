@@ -1,4 +1,8 @@
-"""Runtime configuration and logging setup for Nextflow execution."""
+"""Runtime configuration helpers for Nextflow execution.
+
+This module centralizes environment resolution (e.g., Nextflow JAR paths) and
+runtime logging setup so the engine can remain focused on orchestration.
+"""
 
 from __future__ import annotations
 
@@ -12,14 +16,28 @@ DEFAULT_NEXTFLOW_JAR_PATH = "nextflow/build/releases/nextflow-25.10.0-one.jar"
 
 
 def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
-    """Resolve the Nextflow fat JAR path from arg, env var, or default."""
+    """Resolve the Nextflow fat JAR path.
+
+    Args:
+        explicit_path: Optional path supplied by the caller.
+
+    Returns:
+        Resolved ``Path`` pointing to the Nextflow fat JAR.
+    """
     if explicit_path:
         return Path(explicit_path)
     return Path(os.getenv("NEXTFLOW_JAR_PATH", DEFAULT_NEXTFLOW_JAR_PATH))
 
 
 def assert_nextflow_jar_exists(jar_path: Path) -> None:
-    """Raise an actionable error when the JAR is missing."""
+    """Validate that the Nextflow JAR exists on disk.
+
+    Args:
+        jar_path: Path to the Nextflow fat JAR.
+
+    Raises:
+        FileNotFoundError: If the JAR does not exist.
+    """
     if jar_path.exists():
         return
 
@@ -42,7 +60,12 @@ def assert_nextflow_jar_exists(jar_path: Path) -> None:
 
 
 def configure_logging(verbose: bool) -> None:
-    """Configure Python logging and best-effort Java logging."""
+    """Configure Python and Java logging verbosity.
+
+    Args:
+        verbose: When ``True``, enable debug-level logging in both Python and
+            the underlying Java logging stack (best effort).
+    """
     level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
@@ -53,12 +76,8 @@ def configure_logging(verbose: bool) -> None:
     if verbose:
         return
 
-    try:
-        logger_factory = jpype.JClass("org.slf4j.LoggerFactory")
-        level_cls = jpype.JClass("ch.qos.logback.classic.Level")
-        context = logger_factory.getILoggerFactory()
-        root_logger = context.getLogger("ROOT")
-        root_logger.setLevel(level_cls.WARN)
-    except Exception:
-        # If Java logging configuration fails, continue quietly.
-        pass
+    logger_factory = jpype.JClass("org.slf4j.LoggerFactory")
+    level_cls = jpype.JClass("ch.qos.logback.classic.Level")
+    context = logger_factory.getILoggerFactory()
+    root_logger = context.getLogger("ROOT")
+    root_logger.setLevel(level_cls.WARN)

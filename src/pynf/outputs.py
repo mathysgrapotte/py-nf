@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import jpype
 
 
 def flatten_paths(value: Any) -> Iterator[str]:
-    """Yield string paths extracted from nested Java/Python structures."""
+    """Yield file paths from nested Java or Python structures.
+
+    Args:
+        value: Arbitrary value containing path-like objects.
+
+    Yields:
+        String file paths extracted from nested structures.
+    """
 
     def visit(obj: Any) -> Iterator[str]:
         if obj is None:
@@ -22,13 +29,12 @@ def flatten_paths(value: Any) -> Iterator[str]:
             return
 
         if _is_java_path_like(obj):
-            try:
+            if hasattr(obj, "toAbsolutePath"):
                 yield str(obj.toAbsolutePath())
-            except Exception:
-                try:
-                    yield str(obj.toPath())
-                except Exception:
-                    yield str(obj)
+            elif hasattr(obj, "toPath"):
+                yield str(obj.toPath())
+            else:
+                yield str(obj)
             return
 
         if isinstance(obj, Path):
@@ -45,28 +51,32 @@ def flatten_paths(value: Any) -> Iterator[str]:
                 yield from visit(item)
             return
 
-        if jpype.isJArray(obj):
-            for item in obj:
+        if jpype.isJArray(obj):  # type: ignore[attr-defined]
+            for item in cast(Iterable[Any], obj):
                 yield from visit(item)
             return
 
         if hasattr(obj, "entrySet") and callable(obj.entrySet):
-            for entry in obj.entrySet():
-                yield from visit(entry.getValue())
+            entry_set = obj.entrySet()
+            iterator_factory = getattr(entry_set, "iterator", None)
+            if callable(iterator_factory):
+                iterator = cast(Any, iterator_factory())
+                while iterator.hasNext():  # type: ignore[attr-defined]
+                    entry = iterator.next()  # type: ignore[attr-defined]
+                    yield from visit(entry.getValue())
             return
 
-        if hasattr(obj, "iterator"):
-            iterator = obj.iterator()
-            while iterator.hasNext():
-                yield from visit(iterator.next())
+        iterator_factory = getattr(obj, "iterator", None)
+        if callable(iterator_factory):
+            iterator = cast(Any, iterator_factory())
+            while iterator.hasNext():  # type: ignore[attr-defined]
+                yield from visit(iterator.next())  # type: ignore[attr-defined]
             return
 
-        try:
-            for item in obj:
+        if isinstance(obj, Iterable):
+            for item in cast(Iterable[Any], obj):
                 yield from visit(item)
             return
-        except TypeError:
-            pass
 
         if hasattr(obj, "getValue") and callable(obj.getValue):
             yield from visit(obj.getValue())
@@ -74,8 +84,18 @@ def flatten_paths(value: Any) -> Iterator[str]:
     yield from visit(value)
 
 
-def collect_paths_from_events(workflow_events: Sequence[dict], file_events: Sequence[dict]) -> list[str]:
-    """Collect unique paths from workflow and file publish events."""
+def collect_paths_from_events(
+    workflow_events: Sequence[dict], file_events: Sequence[dict]
+) -> list[str]:
+    """Collect unique paths from workflow and file publish events.
+
+    Args:
+        workflow_events: Workflow output events from the observer.
+        file_events: File publish events from the observer.
+
+    Returns:
+        Ordered list of unique file paths.
+    """
     seen: set[str] = set()
     result: list[str] = []
 
@@ -94,7 +114,14 @@ def collect_paths_from_events(workflow_events: Sequence[dict], file_events: Sequ
 
 
 def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
-    """Fallback: collect visible files from task work directories."""
+    """Collect visible files from task work directories.
+
+    Args:
+        task_workdirs: Work directory paths captured during execution.
+
+    Returns:
+        Ordered list of unique file paths.
+    """
     outputs: list[str] = []
     seen: set[str] = set()
     for workdir in task_workdirs:
@@ -102,8 +129,16 @@ def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
     return outputs
 
 
-def extend_unique(result_list: list[str], seen: set[str], values: Iterable[str]) -> None:
-    """Append unseen values while preserving order."""
+def extend_unique(
+    result_list: list[str], seen: set[str], values: Iterable[str]
+) -> None:
+    """Append unseen values while preserving order.
+
+    Args:
+        result_list: List to append values to.
+        seen: Set tracking already-seen values.
+        values: Iterable of candidate values.
+    """
     for value in values:
         if value in seen:
             continue
@@ -112,7 +147,14 @@ def extend_unique(result_list: list[str], seen: set[str], values: Iterable[str])
 
 
 def _iter_visible_files(workdir: str) -> Iterator[str]:
-    """Yield non-hidden files within a work directory."""
+    """Yield non-hidden files within a work directory.
+
+    Args:
+        workdir: Work directory path.
+
+    Yields:
+        Absolute file paths for non-hidden files.
+    """
     workdir_path = Path(workdir)
     if not workdir_path.exists():
         return
@@ -122,19 +164,20 @@ def _iter_visible_files(workdir: str) -> Iterator[str]:
 
 
 def _is_java_path_like(obj: Any) -> bool:
-    """Return True when the object is a Java path or file."""
-    try:
-        java_path = jpype.JClass("java.nio.file.Path")
-        if isinstance(obj, java_path):
-            return True
-    except RuntimeError:
-        pass
+    """Return ``True`` when the object is a Java path or file.
 
-    try:
-        java_file = jpype.JClass("java.io.File")
-        if isinstance(obj, java_file):
-            return True
-    except RuntimeError:
-        pass
+    Args:
+        obj: Candidate object.
+
+    Returns:
+        ``True`` if the object looks like a Java path or file.
+    """
+    java_path = jpype.JClass("java.nio.file.Path")
+    if isinstance(obj, java_path):
+        return True
+
+    java_file = jpype.JClass("java.io.File")
+    if isinstance(obj, java_file):
+        return True
 
     return False
