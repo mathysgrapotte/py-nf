@@ -17,7 +17,15 @@ __all__ = [
     'validate_meta_map',
 ]
 
-def run_module(nf_file, inputs=None, params=None, executor="local", docker_config=None, verbose=False):
+
+def run_module(
+    nf_file,
+    inputs=None,
+    params=None,
+    executor="local",
+    docker_config=None,
+    verbose=False,
+):
     """
     Simple one-liner module execution.
 
@@ -34,20 +42,21 @@ def run_module(nf_file, inputs=None, params=None, executor="local", docker_confi
         NextflowResult object
     """
     engine = NextflowEngine()
-    script_path = engine.load_script(nf_file)
     return engine.execute(
-        script_path,
+        engine.load_script(nf_file),
         executor=executor,
         params=params,
         inputs=inputs,
         docker_config=docker_config,
-        verbose=verbose
+        verbose=verbose,
     )
 
+
 def read_output_file(file_path):
-    """Read contents of an output file"""
+    """Read contents of an output file."""
     try:
-        with open(file_path, 'r') as f:
-            return f.read()
+        from pathlib import Path
+
+        return Path(file_path).read_text()
     except Exception:
         return None
