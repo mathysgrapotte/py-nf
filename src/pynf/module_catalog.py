@@ -27,7 +27,7 @@ def list_modules(cache_dir: Path, github_token: str | None) -> list[ModuleId]:
 
     Example:
         >>> list_modules(Path("/tmp/cache"), github_token=None)
-        ['nf-core/fastqc', 'nf-core/samtools']
+        ['fastqc', 'samtools']
     """
     cached = read_cached_modules_list(cache_dir)
     if cached:

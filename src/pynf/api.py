@@ -58,7 +58,7 @@ def run_module(
 
     Example:
         >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
-        >>> run_module("nf-core/fastqc", request)
+        >>> run_module("fastqc", request)
         NextflowResult(...)
     """
     return run_nfcore_module(
@@ -93,7 +93,7 @@ def list_modules(
 
     Example:
         >>> list_modules(Path("/tmp/modules"))
-        ['nf-core/fastqc', 'nf-core/samtools']
+        ['fastqc', 'samtools']
     """
     return _list_modules(cache_dir, github_token)
 
@@ -118,7 +118,7 @@ def list_submodules(module_id: ModuleId, github_token: str | None = None) -> lis
         Sorted list of submodule identifiers.
 
     Example:
-        >>> list_submodules("nf-core/samtools")
+        >>> list_submodules("samtools")
         ['view', 'sort']
     """
     return _list_submodules(module_id, github_token)
@@ -140,8 +140,8 @@ def inspect_module(
         Dictionary describing the module files and metadata.
 
     Example:
-        >>> inspect_module("nf-core/fastqc")
-        {'name': 'nf-core/fastqc', 'meta': {...}, ...}
+        >>> inspect_module("fastqc")
+        {'name': 'fastqc', 'meta': {...}, ...}
     """
     return _inspect_module(cache_dir, module_id, github_token)
 
@@ -162,7 +162,7 @@ def get_module_inputs(
         List of input channel definitions.
 
     Example:
-        >>> get_module_inputs("nf-core/fastqc")
+        >>> get_module_inputs("fastqc")
         [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}, ...]
     """
     return _get_module_inputs(cache_dir, module_id, github_token)

@@ -134,6 +134,13 @@ pynf --help
 - `--cache-dir <path>` - Directory to cache modules (default: `./nf-core-modules`)
 - `--github-token <token>` - GitHub personal access token for higher API rate limits (can also use `GITHUB_TOKEN` env var)
 
+### Module identifiers
+
+`pynf` uses module identifiers relative to the `nf-core/modules` repository under `modules/nf-core/`:
+
+- Top-level modules: `fastqc`, `bcftools`, `samtools`
+- Submodules: `samtools/view`, `samtools/sort`
+
 ### Commands
 
 #### `list-modules-cmd` - List available nf-core modules

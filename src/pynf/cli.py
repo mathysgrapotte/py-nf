@@ -2,16 +2,15 @@
 
 import click
 import json
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
 from rich.console import Console
 from rich.table import Table
-from datetime import datetime
 
 from . import api
-from .cli_app import CLIContext
-from .cli_parsing import parse_inputs_option, parse_params_option
-from .cli_rendering import input_group_table, modules_table
 from .module_service import ensure_module
 from .types import DockerConfig, ExecutionRequest
 
@@ -19,7 +18,159 @@ from .types import DockerConfig, ExecutionRequest
 console = Console()
 
 
-def _format_input_group_table(group_idx: int, input_group) -> Table:
+@dataclass
+class CLIContext:
+    """Shared CLI configuration for Click commands.
+
+    Attributes:
+        cache_dir: Optional directory for cached module artifacts.
+        github_token: Optional GitHub token for authenticated requests.
+
+    Example:
+        >>> CLIContext(cache_dir=Path("~/.cache/nf-core-modules"))
+        CLIContext(cache_dir=PosixPath('~/.cache/nf-core-modules'), github_token=None)
+    """
+
+    cache_dir: Path | None = None
+    github_token: str | None = None
+
+
+def parse_params_option(raw: str | None) -> dict[str, Any]:
+    """Parse the CLI ``--params`` option into a typed dictionary.
+
+    The option accepts either a JSON object string or a comma-separated list of
+    ``key=value`` pairs. When JSON parsing succeeds, rich objects like booleans,
+    numbers, lists, and nested dictionaries are preserved. The ``key=value``
+    fallback keeps values as strings when they cannot be parsed as JSON.
+
+    Args:
+        raw: Raw CLI parameter string or ``None``.
+
+    Returns:
+        Parsed parameters. Returns an empty dictionary when ``raw`` is empty.
+
+    Raises:
+        json.JSONDecodeError: If JSON parsing fails for a JSON object string.
+        ValueError: If a ``key=value`` pair is missing the separator.
+
+    Example:
+        >>> parse_params_option('threads=4,debug=true')
+        {'threads': 4, 'debug': True}
+        >>> parse_params_option('{"threads": 4, "debug": true}')
+        {'threads': 4, 'debug': True}
+    """
+    if not raw:
+        return {}
+
+    if raw.strip().startswith("{"):
+        return json.loads(raw)
+
+    parsed: dict[str, Any] = {}
+    for pair in raw.split(","):
+        key, value = pair.strip().split("=", 1)
+        try:
+            parsed[key] = json.loads(value)
+        except json.JSONDecodeError:
+            parsed[key] = value
+    return parsed
+
+
+def parse_inputs_option(raw: str | None) -> list[dict[str, Any]] | None:
+    """Parse the CLI ``--inputs`` option into a list of dictionaries.
+
+    The CLI accepts JSON representing a list of input group mappings, where each
+    mapping contains parameter names and values to feed into the Nextflow module.
+
+    Args:
+        raw: Raw CLI inputs JSON string or ``None``.
+
+    Returns:
+        List of input group mappings, or ``None`` when ``raw`` is empty.
+
+    Raises:
+        json.JSONDecodeError: If the inputs string is not valid JSON.
+        ValueError: If the parsed JSON is not a list.
+
+    Example:
+        >>> parse_inputs_option('[{"reads": ["a.fastq"]}]')
+        [{'reads': ['a.fastq']}]
+    """
+    if not raw:
+        return None
+    parsed = json.loads(raw)
+    if not isinstance(parsed, list):
+        raise ValueError("Error: inputs must be a JSON list of dicts")
+    return parsed
+
+
+def input_group_table(group_idx: int, input_group: dict[str, Any]) -> Table:
+    """Build a rich table listing a single input channel's parameters.
+
+    Args:
+        group_idx: Zero-based index of the input channel.
+        input_group: Mapping describing the channel (``type`` and ``params``).
+
+    Returns:
+        A ``rich.table.Table`` with parameter names and their declared types.
+
+    Example:
+        >>> table = input_group_table(0, {"type": "tuple", "params": [{"name": "meta", "type": "val"}]})
+        >>> "Input Channel 1" in str(table)
+        True
+    """
+    channel_type = input_group.get("type", "unknown")
+    params = input_group.get("params", [])
+    if not isinstance(params, list):
+        params = []
+
+    table = Table(
+        title=f"Input Channel {group_idx + 1} (type: {channel_type})",
+        show_header=True,
+        header_style="bold blue",
+    )
+    table.add_column("Parameter Name", style="cyan")
+    table.add_column("Parameter Type", style="yellow")
+
+    for param in params:
+        if not isinstance(param, dict):
+            continue
+        param_name = param.get("name", "unknown")
+        param_type = param.get("type", "unknown")
+        table.add_row(str(param_name), str(param_type))
+
+    return table
+
+
+def modules_table(modules: list[str], limit: int | None = None) -> Table:
+    """Render a rich table that lists available modules and their type.
+
+    Args:
+        modules: Ordered list of module identifiers.
+        limit: Optional number of modules to display.
+
+    Returns:
+        A ``rich.table.Table`` listing module names and their inferred type.
+
+    Example:
+        >>> table = modules_table(["samtools", "fastqc"], limit=1)
+        >>> "top-level" in str(table)
+        True
+    """
+    table = Table(
+        title="Available nf-core Modules", show_header=True, header_style="bold magenta"
+    )
+    table.add_column("Module Name", style="cyan")
+    table.add_column("Type", style="green")
+
+    display_modules = modules[:limit] if limit else modules
+    for module in display_modules:
+        module_type = "sub-module" if "/" in module else "top-level"
+        table.add_row(module, module_type)
+
+    return table
+
+
+def _format_input_group_table(group_idx: int, input_group: dict[str, Any]) -> Table:
     """Format an input channel into a rich table.
 
     Args:

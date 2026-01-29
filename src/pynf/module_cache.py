@@ -59,7 +59,7 @@ def read_cached_modules_list(cache_dir: Path) -> list[ModuleId]:
 
     Example:
         >>> read_cached_modules_list(Path("/tmp/nf-core-modules"))
-        ['nf-core/fastqc']
+        ['fastqc']
     """
     path = modules_list_path(cache_dir)
     if not path.exists():
@@ -75,7 +75,7 @@ def write_cached_modules_list(cache_dir: Path, modules: Sequence[ModuleId]) -> N
         modules: Module identifiers to persist.
 
     Example:
-        >>> write_cached_modules_list(Path("/tmp/nf-core-modules"), ["nf-core/fastqc"])
+        >>> write_cached_modules_list(Path("/tmp/nf-core-modules"), ["fastqc"])
     """
     path = modules_list_path(cache_dir)
     path.write_text("\n".join(modules) + ("\n" if modules else ""))

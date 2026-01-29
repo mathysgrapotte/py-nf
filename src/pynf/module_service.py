@@ -34,7 +34,7 @@ def ensure_module(
         ``ModulePaths`` describing cached module files.
 
     Example:
-        >>> ensure_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+        >>> ensure_module(Path("/tmp/cache"), "fastqc", None)
         ModulePaths(...)
     """
     return download_module(cache_dir, module_id, github_token, force=force)
@@ -54,7 +54,7 @@ def inspect_module(
         Dictionary containing module metadata, paths, and previews.
 
     Example:
-        >>> inspect_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+        >>> inspect_module(Path("/tmp/cache"), "fastqc", None)
     """
     paths = ensure_module(cache_dir, module_id, github_token)
     meta = _read_yaml(paths.meta_yml)
@@ -85,7 +85,7 @@ def get_module_inputs(
         List of input channel definitions extracted from the module.
 
     Example:
-        >>> get_module_inputs(Path("/tmp/cache"), "nf-core/fastqc", None)
+        >>> get_module_inputs(Path("/tmp/cache"), "fastqc", None)
         [{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}]
     """
     paths = ensure_module(cache_dir, module_id, github_token)
@@ -139,7 +139,7 @@ def run_nfcore_module(
         Execution result object (currently ``NextflowResult``).
 
     Example:
-        >>> run_nfcore_module(Path("/tmp/cache"), "nf-core/fastqc", None, request)
+        >>> run_nfcore_module(Path("/tmp/cache"), "fastqc", None, request)
         NextflowResult(...)
     """
     paths = ensure_module(cache_dir, module_id, github_token, force=force_download)

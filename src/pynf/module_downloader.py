@@ -30,7 +30,7 @@ def download_module(
         ``ModulePaths`` describing the downloaded files.
 
     Example:
-        >>> download_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+        >>> download_module(Path("/tmp/cache"), "fastqc", None)
         ModulePaths(...)
     """
     ensure_cache_dir(cache_dir)
@@ -72,7 +72,7 @@ def _raw_file_urls(module_id: ModuleId) -> dict[str, str]:
         Mapping with ``main_nf`` and ``meta_yml`` URLs.
 
     Example:
-        >>> _raw_file_urls("nf-core/fastqc")
+        >>> _raw_file_urls("fastqc")
         {'main_nf': 'https://...', 'meta_yml': 'https://...'}
     """
     return {
