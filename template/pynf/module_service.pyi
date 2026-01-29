@@ -13,6 +13,9 @@ def ensure_module(
 ) -> ModulePaths:
     """Ensure a module is available locally.
 
+    Example:
+        >>> ensure_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+
     DEPENDS_ON:
     pynf.module_downloader.download_module
 
@@ -25,6 +28,9 @@ def inspect_module(
     cache_dir: Path, module_id: ModuleId, github_token: str | None
 ) -> dict[str, Any]:
     """Inspect a module's metadata and script preview.
+
+    Example:
+        >>> inspect_module(Path("/tmp/cache"), "nf-core/fastqc", None)
 
     DEPENDS_ON:
     pynf.module_service.ensure_module
@@ -41,6 +47,9 @@ def get_module_inputs(
     cache_dir: Path, module_id: ModuleId, github_token: str | None
 ) -> list[dict]:
     """Get module inputs via Nextflow native introspection.
+
+    Example:
+        >>> get_module_inputs(Path("/tmp/cache"), "nf-core/fastqc", None)
 
     DEPENDS_ON:
     pynf.module_service.ensure_module
@@ -61,6 +70,9 @@ def run_nfcore_module(
 ) -> Any:
     """Download (if needed) and execute an nf-core module.
 
+    Example:
+        >>> run_nfcore_module(Path("/tmp/cache"), "nf-core/fastqc", None, request)
+
     DEPENDS_ON:
     pynf.module_service.ensure_module
     pynf.execution.execute_nextflow
@@ -72,6 +84,9 @@ def run_nfcore_module(
 
 def _read_yaml(path: Path) -> dict:
     """Read YAML into a dictionary.
+
+    Example:
+        >>> _read_yaml(Path("/tmp/meta.yml"))
 
     DEPENDS_ON:
     None
@@ -85,6 +100,9 @@ def _read_yaml(path: Path) -> dict:
 def _preview_lines(path: Path, limit: int = 20) -> list[str]:
     """Read a file and return the first N lines.
 
+    Example:
+        >>> _preview_lines(Path("/tmp/main.nf"))
+
     DEPENDS_ON:
     None
 
@@ -95,6 +113,9 @@ def _preview_lines(path: Path, limit: int = 20) -> list[str]:
 
 def _introspect_only_request(script_path: Path) -> ExecutionRequest:
     """Build a request used only for introspection.
+
+    Example:
+        >>> _introspect_only_request(Path("main.nf"))
 
     DEPENDS_ON:
     pynf.types.ExecutionRequest
