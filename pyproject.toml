@@ -12,28 +12,18 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "pyyaml>=6.0",
-    "smolagents>=1.22.0",
-    "litellm>=1.79.0",
-]
-
-[project.optional-dependencies]
-agent = [
-    "smolagents",
-    "openai>=1.0.0",
-    "duckduckgo-search",
 ]
 
 [project.scripts]
 setup-nextflow = "setup_nextflow:main"
 pynf = "pynf.cli:main"
-pynf-agent = "pynf_agent.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build]
-include = ["src/pynf", "src/pynf_agent"]
+include = ["src/pynf"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pynf", "src/pynf_agent"]
+packages = ["src/pynf"]
