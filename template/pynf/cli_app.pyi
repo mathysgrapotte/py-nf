@@ -3,7 +3,15 @@
 from pathlib import Path
 
 class CLIContext:
-    """Shared CLI configuration.
+    """Shared CLI configuration for Click commands exposed by pynf.
+
+    Attributes:
+        cache_dir: Optional filesystem cache location for downloaded modules.
+        github_token: Optional GitHub token leveraged for authenticated API requests.
+
+    Example:
+        >>> CLIContext(cache_dir=Path("~/nf-core-modules"))
+        CLIContext(cache_dir=PosixPath('~/nf-core-modules'), github_token=None)
 
     DEPENDS_ON:
     None
@@ -20,7 +28,15 @@ class CLIContext:
     ) -> None: ...
 
 def build_cli() -> object:
-    """Construct and return the Click CLI application.
+    """Construct and wire the Click CLI application for module management.
+
+    The builder pulls together parsing/rendering helpers, API operations, and shared
+    context so the CLI commands can execute module workflows end-to-end.
+
+    Example:
+        >>> cli_group = build_cli()
+        >>> isinstance(cli_group, click.core.Group)
+        True
 
     DEPENDS_ON:
     pynf.cli_parsing.parse_params_option
@@ -41,7 +57,11 @@ def build_cli() -> object:
     ...
 
 def main() -> None:
-    """CLI entry point.
+    """Entry point used by console_scripts to invoke the CLI.
+
+    Example:
+        >>> main()
+        # Triggers CLI command processing and exits once done
 
     DEPENDS_ON:
     pynf.cli_app.build_cli
