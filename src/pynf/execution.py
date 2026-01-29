@@ -11,6 +11,8 @@ import jpype
 from .jvm_bridge import load_nextflow_classes, start_jvm_if_needed
 from .observer_events import WorkflowOutputCollector
 from .process_introspection import get_process_inputs
+from .session_lifecycle import managed_session, registered_trace_observer
+from .jvm_values import to_java
 from .runtime_config import (
     assert_nextflow_jar_exists,
     configure_logging,
@@ -55,54 +57,52 @@ def execute_nextflow(
     TraceObserverV2 = classes["TraceObserverV2"]
     ScriptMeta = classes["ScriptMeta"]
 
-    session = Session()
-    if request.docker:
-        _configure_docker(session, request.docker)
-
-    ArrayList = jpype.JClass("java.util.ArrayList")
-    ScriptFile = jpype.JClass("nextflow.script.ScriptFile")
-    script_file = ScriptFile(jpype.java.nio.file.Paths.get(str(request.script_path)))
-    session.init(script_file, ArrayList(), None, None)
-    session.start()
-
-    if request.params:
-        for key, value in request.params.items():
-            session.getBinding().setVariable(key, value)
-
-    loader = ScriptLoaderFactory.create(session)
-    java_path = jpype.java.nio.file.Paths.get(str(request.script_path))
-    loader.parse(java_path)
-    script = loader.getScript()
-
-    input_channels = get_process_inputs(loader, script, ScriptMeta)
-    logger.debug("Discovered input channels: %s", input_channels)
-
-    if request.inputs:
-        validate_inputs(request.inputs, input_channels)
-        _set_params_from_inputs(session, input_channels, request.inputs)
-
-    collector = WorkflowOutputCollector()
-    observer_proxy = jpype.JProxy(TraceObserverV2, inst=collector)
-    observer_registered = _register_output_observer(session, observer_proxy)
-
-    try:
-        loader.runScript()
-        session.fireDataflowNetwork(False)
-        session.await_()
-    finally:
-        if observer_registered:
-            _unregister_output_observer(session, observer_proxy)
-        session.destroy()
-
     from .result import NextflowResult
 
+    with managed_session(Session, str(request.script_path)) as session:
+        if request.docker:
+            _configure_docker(session, request.docker)
+
+        if request.params:
+            for key, value in request.params.items():
+                session.getBinding().setVariable(key, value)
+
+        loader = ScriptLoaderFactory.create(session)
+        java_path = jpype.java.nio.file.Paths.get(str(request.script_path))
+        loader.parse(java_path)
+        script = loader.getScript()
+
+        input_channels = get_process_inputs(loader, script, ScriptMeta)
+        logger.debug("Discovered input channels: %s", input_channels)
+
+        if request.inputs:
+            validate_inputs(request.inputs, input_channels)
+            _set_params_from_inputs(session, input_channels, request.inputs)
+
+        collector = WorkflowOutputCollector()
+        observer_proxy = jpype.JProxy(TraceObserverV2, inst=collector)
+
+        with registered_trace_observer(session, observer_proxy):
+            loader.runScript()
+            session.fireDataflowNetwork(False)
+            session.await_()
+
+        # Snapshot values *before* session teardown.
+        work_dir = str(session.getWorkDir())
+        stats = session.getStatsObserver().getStats()
+        report = {
+            "completed_tasks": stats.getSucceededCount(),
+            "failed_tasks": stats.getFailedCount(),
+            "work_dir": work_dir,
+        }
+
+    # Session destroyed here.
     return NextflowResult(
-        script,
-        session,
-        loader,
         workflow_events=collector.workflow_events(),
         file_events=collector.file_events(),
         task_workdirs=collector.task_workdirs(),
+        execution_report=report,
+        work_dir=work_dir,
     )
 
 
@@ -172,80 +172,6 @@ def _set_params_from_inputs(
                 continue
 
             param_value = input_dict[param_name]
-            params_obj.put(param_name, _convert_to_java_type(param_value, param_type))
+            params_obj.put(param_name, to_java(param_value, param_type=param_type))
 
 
-def _convert_to_java_type(value: Any, param_type: str) -> Any:
-    """Convert Python values to Java-compatible representations.
-
-    Args:
-        value: Python value to convert.
-        param_type: Nextflow parameter type (e.g., ``path``).
-
-    Returns:
-        Java-compatible value suitable for Nextflow.
-
-    Example:
-        >>> _convert_to_java_type(Path("sample.fastq"), "path")
-        'sample.fastq'
-    """
-    HashMap = jpype.JClass("java.util.HashMap")
-
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        meta_map = HashMap()
-        for key, val in value.items():
-            meta_map.put(key, val)
-        return meta_map
-    if isinstance(value, list):
-        return ",".join(str(v) for v in value)
-    if param_type == "path":
-        return str(value)
-    return value
-
-
-def _register_output_observer(session: Any, observer: Any) -> bool:
-    """Register an output observer with the Nextflow session.
-
-    Args:
-        session: Nextflow session instance.
-        observer: JPype proxy implementing TraceObserverV2.
-
-    Returns:
-        ``True`` if the observer was registered successfully.
-    """
-    return _mutate_observers(session, observer, add=True)
-
-
-def _unregister_output_observer(session: Any, observer: Any) -> None:
-    """Unregister an output observer from the Nextflow session.
-
-    Args:
-        session: Nextflow session instance.
-        observer: JPype proxy implementing TraceObserverV2.
-    """
-    _mutate_observers(session, observer, add=False)
-
-
-def _mutate_observers(session: Any, observer: Any, add: bool) -> bool:
-    """Add or remove a TraceObserverV2 instance from the session.
-
-    Args:
-        session: Nextflow session instance.
-        observer: JPype proxy instance implementing TraceObserverV2.
-        add: When ``True``, add the observer; otherwise remove it.
-
-    Returns:
-        ``True`` if the mutation succeeded.
-    """
-    session_class = session.getClass()
-    field = session_class.getDeclaredField("observersV2")
-    field.setAccessible(True)
-    observers = field.get(session)
-    if add:
-        observers.add(observer)
-    else:
-        observers.remove(observer)
-    field.set(session, observers)
-    return True

@@ -89,8 +89,15 @@ def configure_logging(verbose: bool) -> None:
     if verbose:
         return
 
-    logger_factory = jpype.JClass("org.slf4j.LoggerFactory")
-    level_cls = jpype.JClass("ch.qos.logback.classic.Level")
-    context = logger_factory.getILoggerFactory()
-    root_logger = context.getLogger("ROOT")
-    root_logger.setLevel(level_cls.WARN)
+    # Best-effort: do not assume a specific SLF4J backend.
+    if not jpype.isJVMStarted():  # type: ignore[attr-defined]
+        return
+
+    try:
+        logger_factory = jpype.JClass("org.slf4j.LoggerFactory")
+        level_cls = jpype.JClass("ch.qos.logback.classic.Level")
+        context = logger_factory.getILoggerFactory()
+        root_logger = context.getLogger("ROOT")
+        root_logger.setLevel(level_cls.WARN)
+    except Exception:
+        return
