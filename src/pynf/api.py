@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from .execution import execute_nextflow
-from .module_catalog import get_rate_limit_status as _get_rate_limit_status
-from .module_catalog import list_modules as _list_modules
-from .module_catalog import list_submodules as _list_submodules
+from .nfcore_modules import get_rate_limit_status as _get_rate_limit_status
+from .nfcore_modules import list_modules as _list_modules
+from .nfcore_modules import list_submodules as _list_submodules
 from .module_service import get_module_inputs as _get_module_inputs
 from .module_service import inspect_module as _inspect_module
 from .module_service import run_nfcore_module
@@ -81,15 +81,6 @@ def list_modules(
 
     Returns:
         Sorted list of module identifiers.
-    """
-    """List available modules, using cache when possible.
-
-    Args:
-        cache_dir: Cache directory for module metadata.
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Sorted list of module identifiers.
 
     Example:
         >>> list_modules(Path("/tmp/modules"))
@@ -99,15 +90,6 @@ def list_modules(
 
 
 def list_submodules(module_id: ModuleId, github_token: str | None = None) -> list[str]:
-    """List submodules under a module identifier.
-
-    Args:
-        module_id: Module identifier.
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Sorted list of submodule identifiers.
-    """
     """List submodules under a module identifier.
 
     Args:
@@ -169,14 +151,6 @@ def get_module_inputs(
 
 
 def get_rate_limit_status(github_token: str | None = None) -> dict:
-    """Return GitHub API rate limit status.
-
-    Args:
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Mapping describing GitHub API rate limit state.
-    """
     """Return GitHub API rate limit status.
 
     Args:

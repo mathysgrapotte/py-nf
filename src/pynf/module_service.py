@@ -10,10 +10,10 @@ import yaml
 
 from .execution import execute_nextflow
 from .jvm_bridge import load_nextflow_classes, start_jvm_if_needed
-from .module_downloader import download_module
+from .nfcore_modules import ModulePaths, ensure_module as _ensure_module
 from .process_introspection import get_process_inputs
 from .runtime_config import assert_nextflow_jar_exists, resolve_nextflow_jar_path
-from .types import ExecutionRequest, ModuleId, ModulePaths
+from .types import ExecutionRequest, ModuleId
 
 
 def ensure_module(
@@ -37,7 +37,7 @@ def ensure_module(
         >>> ensure_module(Path("/tmp/cache"), "fastqc", None)
         ModulePaths(...)
     """
-    return download_module(cache_dir, module_id, github_token, force=force)
+    return _ensure_module(cache_dir, module_id, github_token, force=force)
 
 
 def inspect_module(
