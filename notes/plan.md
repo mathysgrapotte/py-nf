@@ -1,4 +1,10 @@
-# Complete Python-JPype Nextflow Integration Plan
+# Complete Python-JPype Nextflow Integration Plan (historical)
+
+> This document is a historical planning artifact.
+>
+> Current package layout lives under `src/pynf/` and the preferred entry points are
+> the functional API (`pynf.run_module`, `pynf.api.run_script`, `pynf.api.run_module`) plus
+> `ExecutionRequest`.
 
 ## 1. **Project Setup & Dependencies**
 - Update `pyproject.toml`: Add `jpype1` dependency

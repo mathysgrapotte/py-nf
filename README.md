@@ -117,6 +117,22 @@ result = run_module("nextflow_scripts/file-output-process.nf")
 assert any(Path(p).name == "output.txt" for p in result.get_output_files())
 ```
 
+### Running an nf-core module from Python
+
+```python
+from pathlib import Path
+
+from pynf import ExecutionRequest, run_nfcore_module
+
+request = ExecutionRequest(
+    # Note: script_path is ignored for nf-core runs; the cached module's main.nf is used.
+    script_path=Path("."),
+    inputs=[{"meta": {"id": "sample1"}, "reads": ["sample.fastq"]}],
+)
+result = run_nfcore_module("fastqc", request)
+print(result.get_output_files())
+```
+
 ## CLI Tools
 
 The `pynf` command-line interface provides easy access to nf-core modules without writing Python code.
@@ -136,10 +152,12 @@ pynf --help
 
 ### Module identifiers
 
-`pynf` uses module identifiers relative to the `nf-core/modules` repository under `modules/nf-core/`:
+`pynf` uses module identifiers relative to the `nf-core/modules` repository under `modules/nf-core/`.
 
 - Top-level modules: `fastqc`, `bcftools`, `samtools`
 - Submodules: `samtools/view`, `samtools/sort`
+
+For convenience, callers may also pass `nf-core/<id>`; the prefix is ignored.
 
 ### Commands
 
@@ -301,4 +319,4 @@ If you prefer to set up Nextflow manually instead of using the automated script:
    uv run python tests/test_integration.py
    ```
 
-Happy hacking! 🚀
+Happy hacking!
