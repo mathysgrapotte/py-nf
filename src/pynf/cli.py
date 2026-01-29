@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import api
-from .module_service import ensure_module
+from ._core.nfcore_modules import ensure_module
 from ._core.types import DockerConfig, ExecutionRequest
 
 # Create a rich console for pretty printing
