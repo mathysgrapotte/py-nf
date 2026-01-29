@@ -9,6 +9,9 @@ def validate_meta_map(
 ) -> None:
     """Validate that required meta fields are present.
 
+    Example:
+        >>> validate_meta_map({'id': 'sample1'})
+
     DEPENDS_ON:
     None
 
@@ -19,6 +22,10 @@ def validate_meta_map(
 
 def normalize_inputs(inputs: InputGroups | None) -> list[dict]:
     """Normalize optional inputs into a list of dict-like groups.
+
+    Example:
+        >>> normalize_inputs(None)
+        []
 
     DEPENDS_ON:
     None
@@ -32,6 +39,9 @@ def validate_inputs(
     inputs: InputGroups | None, input_channels: Sequence[ChannelInfo | dict]
 ) -> None:
     """Validate user inputs against discovered input channels.
+
+    Example:
+        >>> validate_inputs([{'reads': 'sample.fq'}], [{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}])
 
     DEPENDS_ON:
     pynf.validation.normalize_inputs
@@ -48,6 +58,9 @@ def _validate_input_count(
 ) -> None:
     """Validate that the number of input groups matches expectations.
 
+    Example:
+        >>> _validate_input_count([{}], [{'type': 'tuple', 'params': []}])
+
     DEPENDS_ON:
     pynf.validation._format_count_error
 
@@ -63,6 +76,9 @@ def _validate_input_group(
 ) -> None:
     """Validate a single input group against expected parameters.
 
+    Example:
+        >>> _validate_input_group({'reads': 'a.fq'}, expected_channel, 0)
+
     DEPENDS_ON:
     pynf.validation._format_missing_params_error
     pynf.validation._format_extra_params_error
@@ -76,6 +92,9 @@ def _format_count_error(
     inputs: Sequence[dict], input_channels: Sequence[ChannelInfo | dict]
 ) -> str:
     """Format a detailed input-count error message.
+
+    Example:
+        >>> _format_count_error([], [{'type': 'tuple', 'params': []}])
 
     DEPENDS_ON:
     pynf.validation._format_expected_structure
@@ -94,6 +113,9 @@ def _format_missing_params_error(
 ) -> str:
     """Format a detailed missing-parameter error message.
 
+    Example:
+        >>> _format_missing_params_error({'reads'}, expected_params, 0, 'tuple')
+
     DEPENDS_ON:
     None
 
@@ -110,6 +132,9 @@ def _format_extra_params_error(
 ) -> str:
     """Format a detailed extra-parameter error message.
 
+    Example:
+        >>> _format_extra_params_error({'foo'}, expected_params, 0, 'tuple')
+
     DEPENDS_ON:
     None
 
@@ -121,6 +146,9 @@ def _format_extra_params_error(
 def _format_expected_structure(input_channels: Sequence[ChannelInfo | dict]) -> str:
     """Render the expected input structure for error messages.
 
+    Example:
+        >>> _format_expected_structure([{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}])
+
     DEPENDS_ON:
     None
 
@@ -131,6 +159,9 @@ def _format_expected_structure(input_channels: Sequence[ChannelInfo | dict]) -> 
 
 def _format_provided_inputs(inputs: Sequence[dict]) -> str:
     """Render the provided inputs for error messages.
+
+    Example:
+        >>> _format_provided_inputs([{'reads': 'sample.fq'}])
 
     DEPENDS_ON:
     None
