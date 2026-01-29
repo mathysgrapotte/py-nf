@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from .github_api import fetch_directory_entries, fetch_raw_text, fetch_rate_limit
+from ._core.github_api import fetch_directory_entries, fetch_raw_text, fetch_rate_limit
 
 ModuleId = str
 
