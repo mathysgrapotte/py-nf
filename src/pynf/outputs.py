@@ -10,13 +10,22 @@ import jpype
 
 
 def flatten_paths(value: Any) -> Iterator[str]:
-    """Yield file paths from nested Java or Python structures.
+    """Yield normalized file paths from nested Java or Python structures.
+
+    This helper recursively walks through strings, pathlib objects, Java path/file
+    proxies, dictionaries, collections, Java iterators, and anything exposing a
+    ``getValue`` method so that downstream code can treat workflow output events as
+    a flat list of filesystem paths.
 
     Args:
-        value: Arbitrary value containing path-like objects.
+        value: Arbitrary value containing path-like objects emitted by Nextflow.
 
     Yields:
         String file paths extracted from nested structures.
+
+    Example:
+        >>> flatten_paths({"path": Path("sample.txt")})
+        'sample.txt'
     """
 
     def visit(obj: Any) -> Iterator[str]:
@@ -95,6 +104,10 @@ def collect_paths_from_events(
 
     Returns:
         Ordered list of unique file paths.
+
+    Example:
+        >>> collect_paths_from_events(workflow_events, file_events)
+        ['/data/output.txt']
     """
     seen: set[str] = set()
     result: list[str] = []
@@ -121,6 +134,10 @@ def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
 
     Returns:
         Ordered list of unique file paths.
+
+    Example:
+        >>> collect_paths_from_workdirs(['/tmp/workdir'])
+        ['/tmp/workdir/output.txt']
     """
     outputs: list[str] = []
     seen: set[str] = set()
@@ -138,6 +155,11 @@ def extend_unique(
         result_list: List to append values to.
         seen: Set tracking already-seen values.
         values: Iterable of candidate values.
+
+    Example:
+        >>> extend_unique([], set(), ['a', 'b'])
+        >>> result_list
+        ['a', 'b']
     """
     for value in values:
         if value in seen:
@@ -154,6 +176,10 @@ def _iter_visible_files(workdir: str) -> Iterator[str]:
 
     Yields:
         Absolute file paths for non-hidden files.
+
+    Example:
+        >>> list(_iter_visible_files('/tmp/workdir'))
+        ['/tmp/workdir/out.txt']
     """
     workdir_path = Path(workdir)
     if not workdir_path.exists():
@@ -175,6 +201,10 @@ def _is_java_path_like(obj: Any) -> bool:
 
     Returns:
         ``True`` if the object looks like a Java path or file.
+
+    Example:
+        >>> _is_java_path_like(java_path)
+        True
     """
     if not jpype.isJVMStarted():  # type: ignore[attr-defined]
         return False

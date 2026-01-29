@@ -11,8 +11,14 @@ import jpype
 def start_jvm_if_needed(jar_path: Path) -> None:
     """Start the JVM with the Nextflow JAR on the classpath.
 
+    This helper ensures the JVM is bootstrapped exactly once so that later
+    components can obtain Nextflow class proxies.
+
     Args:
         jar_path: Path to the Nextflow fat JAR.
+
+    Example:
+        >>> start_jvm_if_needed(Path("/tmp/nextflow.jar"))
     """
     if not jpype.isJVMStarted():
         jpype.startJVM(classpath=[str(jar_path)])
@@ -23,6 +29,11 @@ def load_nextflow_classes() -> dict[str, Any]:
 
     Returns:
         Mapping of class names to JPype class proxies.
+
+    Example:
+        >>> classes = load_nextflow_classes()
+        >>> 'ScriptLoaderFactory' in classes
+        True
     """
     return {
         "ScriptLoaderFactory": jpype.JClass("nextflow.script.ScriptLoaderFactory"),
