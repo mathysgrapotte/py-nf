@@ -1,1 +1,4 @@
-"""Internal implementation package (stubs)."""
+from __future__ import annotations
+
+from typing import Any
+
