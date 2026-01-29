@@ -7,6 +7,10 @@ DEFAULT_NEXTFLOW_JAR_PATH: str
 def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
     """Resolve the Nextflow fat JAR path from arg, env var, or default.
 
+    Example:
+        >>> resolve_nextflow_jar_path("/custom/nextflow.jar")
+        PosixPath('/custom/nextflow.jar')
+
     DEPENDS_ON:
     None
 
@@ -18,6 +22,9 @@ def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
 
 def assert_nextflow_jar_exists(jar_path: Path) -> None:
     """Raise an actionable error when the jar path is missing.
+
+    Example:
+        >>> assert_nextflow_jar_exists(Path("/tmp/nextflow.jar"))
 
     DEPENDS_ON:
     None
@@ -32,6 +39,9 @@ def assert_nextflow_jar_exists(jar_path: Path) -> None:
 
 def configure_logging(verbose: bool) -> None:
     """Configure Python logging and best-effort Java logging.
+
+    Example:
+        >>> configure_logging(verbose=True)
 
     DEPENDS_ON:
     None
