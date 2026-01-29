@@ -19,6 +19,10 @@ def list_modules(
 
     Returns:
         Sorted list of module identifiers.
+
+    Example:
+        >>> list_modules()
+        ['nf-core/fastqc', 'nf-core/samtools']
     """
     return api.list_modules(
         cache_dir=cache_dir or api.DEFAULT_CACHE_DIR, github_token=github_token
@@ -39,6 +43,10 @@ def list_submodules(
 
     Returns:
         Sorted list of submodule identifiers.
+
+    Example:
+        >>> list_submodules("nf-core/samtools")
+        ['view', 'sort']
     """
     return api.list_submodules(module, github_token=github_token)
 
@@ -59,6 +67,10 @@ def download_module(
 
     Returns:
         ``NFCoreModule`` wrapper describing cached files.
+
+    Example:
+        >>> download_module("nf-core/fastqc", cache_dir=Path("/tmp/cache"))
+        NFCoreModule(...)
     """
     return download_nfcore_module(
         module,
@@ -82,6 +94,10 @@ def inspect_module(
 
     Returns:
         Dictionary containing module metadata and file previews.
+
+    Example:
+        >>> inspect_module("nf-core/fastqc")
+        {'name': 'nf-core/fastqc', 'meta': {...}, ...}
     """
     cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
     return api.inspect_module(module, cache_dir=cache_dir, github_token=github_token)
@@ -101,6 +117,10 @@ def get_module_inputs(
 
     Returns:
         List of input channel definitions.
+
+    Example:
+        >>> get_module_inputs("nf-core/fastqc")
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}, ...]
     """
     cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
     return api.get_module_inputs(module, cache_dir=cache_dir, github_token=github_token)
@@ -118,6 +138,10 @@ def module_exists_locally(
 
     Returns:
         ``True`` when the module appears cached locally.
+
+    Example:
+        >>> module_exists_locally("nf-core/fastqc")
+        True
     """
     cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
     module_dir = cache_dir / module
@@ -134,6 +158,10 @@ def get_rate_limit_status(
 
     Returns:
         Mapping describing GitHub API rate limit state.
+
+    Example:
+        >>> get_rate_limit_status()
+        {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}
     """
     return api.get_rate_limit_status(github_token)
 
@@ -162,6 +190,10 @@ def run_nfcore_module(
 
     Returns:
         Execution result object (currently ``NextflowResult``).
+
+    Example:
+        >>> run_nfcore_module("nf-core/fastqc", inputs=[{"reads": "sample.fq"}])
+        NextflowResult(...)
     """
     cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
     docker_config = (
