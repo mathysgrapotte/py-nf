@@ -28,6 +28,10 @@ def download_module(
 
     Returns:
         ``ModulePaths`` describing the downloaded files.
+
+    Example:
+        >>> download_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+        ModulePaths(...)
     """
     ensure_cache_dir(cache_dir)
     paths = module_paths(cache_dir, module_id)
@@ -50,6 +54,10 @@ def _is_cached(paths: ModulePaths) -> bool:
 
     Returns:
         ``True`` when both ``main.nf`` and ``meta.yml`` exist.
+
+    Example:
+        >>> _is_cached(paths)
+        True
     """
     return paths.main_nf.exists() and paths.meta_yml.exists()
 
@@ -62,6 +70,10 @@ def _raw_file_urls(module_id: ModuleId) -> dict[str, str]:
 
     Returns:
         Mapping with ``main_nf`` and ``meta_yml`` URLs.
+
+    Example:
+        >>> _raw_file_urls("nf-core/fastqc")
+        {'main_nf': 'https://...', 'meta_yml': 'https://...'}
     """
     return {
         "main_nf": f"{RAW_BASE}/{module_id}/main.nf",
@@ -75,5 +87,8 @@ def _write_module_file(dest: Path, content: str) -> None:
     Args:
         dest: Destination path for the module file.
         content: Raw text content to write.
+
+    Example:
+        >>> _write_module_file(Path("/tmp/main.nf"), "workflow")
     """
     dest.write_text(content)

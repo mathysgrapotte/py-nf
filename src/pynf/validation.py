@@ -21,6 +21,9 @@ def validate_meta_map(
 
     Raises:
         ValueError: If any required fields are missing.
+
+    Example:
+        >>> validate_meta_map({"id": "sample1"}, ["id"])
     """
     required = list(required_fields) if required_fields is not None else ["id"]
     missing = [field for field in required if field not in meta]
@@ -42,6 +45,10 @@ def normalize_inputs(
     Returns:
         A list of input-group mappings, or an empty list when ``inputs`` is
         ``None``.
+
+    Example:
+        >>> normalize_inputs(None)
+        []
     """
     return [] if inputs is None else list(inputs)
 
@@ -56,6 +63,9 @@ def validate_inputs(inputs, input_channels) -> None:
 
     Raises:
         ValueError: If inputs are missing, extra, or structurally incorrect.
+
+    Example:
+        >>> validate_inputs([{"reads": "sample.fq"}], [{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}])
     """
     if not input_channels:
         if inputs:
@@ -80,6 +90,9 @@ def _validate_input_count(inputs, input_channels) -> None:
 
     Raises:
         ValueError: If the number of input groups does not match.
+
+    Example:
+        >>> _validate_input_count([{}], [{'type': 'tuple', 'params': []}])
     """
     if len(inputs) != len(input_channels):
         raise ValueError(_format_count_error(inputs, input_channels))
@@ -95,6 +108,9 @@ def _validate_input_group(user_input, expected_channel, group_idx: int) -> None:
 
     Raises:
         ValueError: If required parameters are missing or extra parameters exist.
+
+    Example:
+        >>> _validate_input_group({'reads': 'a.fq'}, expected_channel, 0)
     """
     channel_type = expected_channel.get("type")
     expected_params = expected_channel.get("params", [])
@@ -128,6 +144,9 @@ def _format_count_error(inputs, input_channels) -> str:
 
     Returns:
         Human-readable multi-line error message.
+
+    Example:
+        >>> _format_count_error([], [{'type': 'tuple', 'params': []}])
     """
     count = len(inputs) if inputs else 0
     lines = [
@@ -164,6 +183,9 @@ def _format_missing_params_error(
 
     Returns:
         Human-readable multi-line error message.
+
+    Example:
+        >>> _format_missing_params_error({'reads'}, expected_params, 0, 'tuple')
     """
     group_number = group_idx + 1
     lines = [
@@ -194,6 +216,9 @@ def _format_extra_params_error(
 
     Returns:
         Human-readable multi-line error message.
+
+    Example:
+        >>> _format_extra_params_error({'foo'}, expected_params, 0, 'tuple')
     """
     group_number = group_idx + 1
     lines = [
@@ -219,6 +244,9 @@ def _format_expected_structure(input_channels) -> str:
 
     Returns:
         Formatted input structure string.
+
+    Example:
+        >>> _format_expected_structure([{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}])
     """
     lines = ["inputs=["]
     for idx, channel in enumerate(input_channels):
@@ -240,6 +268,9 @@ def _format_provided_inputs(inputs) -> str:
 
     Returns:
         Formatted input structure string.
+
+    Example:
+        >>> _format_provided_inputs([{'reads': 'sample.fq'}])
     """
     lines = ["inputs=["]
     for idx, inp in enumerate(inputs):

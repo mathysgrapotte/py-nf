@@ -7,6 +7,10 @@ def get_process_inputs(
 ) -> list[dict]:
     """Extract process inputs via Nextflow ScriptMeta.
 
+    Example:
+        >>> get_process_inputs(loader, script, ScriptMeta)
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}]
+
     DEPENDS_ON:
     pynf.process_introspection._extract_process_inputs
 
@@ -18,6 +22,10 @@ def get_process_inputs(
 def _extract_process_inputs(process_def: Any) -> list[dict]:
     """Extract all inputs from a single process definition.
 
+    Example:
+        >>> _extract_process_inputs(process_def)
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}]
+
     DEPENDS_ON:
     pynf.process_introspection._build_channel_info
 
@@ -28,6 +36,10 @@ def _extract_process_inputs(process_def: Any) -> list[dict]:
 
 def _build_channel_info(input_def: Any) -> dict:
     """Build channel metadata from an input definition.
+
+    Example:
+        >>> _build_channel_info(input_def)
+        {'type': 'tuple', 'params': [...]}
 
     DEPENDS_ON:
     pynf.process_introspection._extract_tuple_components
@@ -41,6 +53,10 @@ def _build_channel_info(input_def: Any) -> dict:
 def _extract_tuple_components(input_def: Any) -> list[dict[str, str]]:
     """Extract tuple components from an input definition.
 
+    Example:
+        >>> _extract_tuple_components(input_def)
+        [{'type': 'val', 'name': 'meta'}]
+
     DEPENDS_ON:
     None
 
@@ -51,6 +67,10 @@ def _extract_tuple_components(input_def: Any) -> list[dict[str, str]]:
 
 def _extract_simple_param(input_def: Any) -> dict[str, str]:
     """Extract a simple parameter from an input definition.
+
+    Example:
+        >>> _extract_simple_param(input_def)
+        {'type': 'path', 'name': 'reads'}
 
     DEPENDS_ON:
     None

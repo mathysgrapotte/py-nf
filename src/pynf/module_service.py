@@ -32,6 +32,10 @@ def ensure_module(
 
     Returns:
         ``ModulePaths`` describing cached module files.
+
+    Example:
+        >>> ensure_module(Path("/tmp/cache"), "nf-core/fastqc", None)
+        ModulePaths(...)
     """
     return download_module(cache_dir, module_id, github_token, force=force)
 
@@ -48,6 +52,9 @@ def inspect_module(
 
     Returns:
         Dictionary containing module metadata, paths, and previews.
+
+    Example:
+        >>> inspect_module(Path("/tmp/cache"), "nf-core/fastqc", None)
     """
     paths = ensure_module(cache_dir, module_id, github_token)
     meta = _read_yaml(paths.meta_yml)
@@ -76,6 +83,10 @@ def get_module_inputs(
 
     Returns:
         List of input channel definitions extracted from the module.
+
+    Example:
+        >>> get_module_inputs(Path("/tmp/cache"), "nf-core/fastqc", None)
+        [{'type': 'tuple', 'params': [{'name': 'reads', 'type': 'path'}]}]
     """
     paths = ensure_module(cache_dir, module_id, github_token)
     jar_path = resolve_nextflow_jar_path(None)
@@ -126,6 +137,10 @@ def run_nfcore_module(
 
     Returns:
         Execution result object (currently ``NextflowResult``).
+
+    Example:
+        >>> run_nfcore_module(Path("/tmp/cache"), "nf-core/fastqc", None, request)
+        NextflowResult(...)
     """
     paths = ensure_module(cache_dir, module_id, github_token, force=force_download)
     module_request = ExecutionRequest(
@@ -147,6 +162,9 @@ def _read_yaml(path: Path) -> dict:
 
     Returns:
         Parsed YAML content.
+
+    Example:
+        >>> _read_yaml(Path("/tmp/meta.yml"))
     """
     return yaml.safe_load(path.read_text())
 
@@ -160,6 +178,10 @@ def _preview_lines(path: Path, limit: int = 20) -> list[str]:
 
     Returns:
         List of line strings.
+
+    Example:
+        >>> _preview_lines(Path("/tmp/main.nf"))
+        ['workflow {', '  ...']
     """
     return path.read_text().splitlines()[:limit]
 
@@ -172,5 +194,8 @@ def _introspect_only_request(script_path: Path) -> ExecutionRequest:
 
     Returns:
         Execution request with default settings and no inputs.
+
+    Example:
+        >>> _introspect_only_request(Path("main.nf"))
     """
     return ExecutionRequest(script_path=script_path)

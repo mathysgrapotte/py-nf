@@ -18,11 +18,18 @@ DEFAULT_NEXTFLOW_JAR_PATH = "nextflow/build/releases/nextflow-25.10.0-one.jar"
 def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
     """Resolve the Nextflow fat JAR path.
 
+    The resolution order is: explicit argument, ``NEXTFLOW_JAR_PATH`` env var,
+    and finally the bundled default constant, so callers can override as needed.
+
     Args:
         explicit_path: Optional path supplied by the caller.
 
     Returns:
         Resolved ``Path`` pointing to the Nextflow fat JAR.
+
+    Example:
+        >>> resolve_nextflow_jar_path("/custom/nextflow.jar")
+        PosixPath('/custom/nextflow.jar')
     """
     if explicit_path:
         return Path(explicit_path)
@@ -30,13 +37,16 @@ def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
 
 
 def assert_nextflow_jar_exists(jar_path: Path) -> None:
-    """Validate that the Nextflow JAR exists on disk.
+    """Validate that the Nextflow JAR exists on disk and raise a detailed error otherwise.
 
     Args:
         jar_path: Path to the Nextflow fat JAR.
 
     Raises:
         FileNotFoundError: If the JAR does not exist.
+
+    Example:
+        >>> assert_nextflow_jar_exists(Path("/tmp/nextflow.jar"))
     """
     if jar_path.exists():
         return
@@ -65,6 +75,9 @@ def configure_logging(verbose: bool) -> None:
     Args:
         verbose: When ``True``, enable debug-level logging in both Python and
             the underlying Java logging stack (best effort).
+
+    Example:
+        >>> configure_logging(verbose=True)
     """
     level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(

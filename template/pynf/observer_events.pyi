@@ -5,6 +5,11 @@ from typing import Any
 class WorkflowOutputCollector:
     """Collect workflow outputs, file publish events, and task workdirs.
 
+    Example:
+        >>> collector = WorkflowOutputCollector()
+        >>> collector.workflow_events()
+        []
+
     DEPENDS_ON:
     None
 
@@ -29,10 +34,13 @@ class WorkflowOutputCollector:
     def workflow_events(self) -> list[dict]: ...
     def file_events(self) -> list[dict]: ...
     def task_workdirs(self) -> list[str]: ...
-    def _record_task_workdir(self, event: Any, hook_name: str) -> None:
-        """Record workdir from a task callback.
+def _record_task_workdir(self, event: Any, hook_name: str) -> None:
+    """Record workdir from a task callback.
 
-        DEPENDS_ON:
+    Example:
+        >>> _record_task_workdir(event, "onTaskComplete")
+
+    DEPENDS_ON:
         None
 
         EXTERNAL_DEPENDS_ON:

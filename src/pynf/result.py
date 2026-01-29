@@ -23,6 +23,10 @@ class NextflowResult:
         script: Parsed Nextflow script object.
         session: Nextflow session instance.
         loader: Script loader instance.
+
+    Example:
+        >>> result.get_output_files()
+        ['/data/output.txt']
     """
 
     def __init__(
@@ -46,6 +50,10 @@ class NextflowResult:
 
         Returns:
             Ordered list of unique output file paths.
+
+        Example:
+            >>> result.get_output_files()
+            ['/data/output.txt']
         """
         paths = self._collect_paths_from_observer()
         if not paths:
@@ -67,6 +75,15 @@ class NextflowResult:
 
         Returns:
             List of workflow output dictionaries with ``name`` and ``value``.
+        """
+        """Return structured representation of workflow outputs.
+
+        Returns:
+            List of workflow output dictionaries with ``name`` and ``value``.
+
+        Example:
+            >>> result.get_workflow_outputs()
+            [{'name': 'wf_out', 'value': 'done', 'index': 0}]
         """
 
         def convert(value):
@@ -119,6 +136,10 @@ class NextflowResult:
 
         Returns:
             Mapping of process names to output metadata.
+
+        Example:
+            >>> result.get_process_outputs()
+            {'process1': {'output_count': 1, 'output_names': ['out']}}
         """
         ScriptMeta = jpype.JClass("nextflow.script.ScriptMeta")
         script_meta = ScriptMeta.get(self.script)
@@ -139,6 +160,10 @@ class NextflowResult:
 
         Returns:
             Stdout contents when available, otherwise an empty string.
+
+        Example:
+            >>> result.get_stdout()
+            'sample output'
         """
         Files = _java_class("java.nio.file.Files")
         work_dir = self.session.getWorkDir().toFile()
@@ -153,6 +178,10 @@ class NextflowResult:
 
         Returns:
             Mapping containing task counts and the work directory.
+
+        Example:
+            >>> result.get_execution_report()
+            {'completed_tasks': 10, 'failed_tasks': 0, 'work_dir': '/tmp/work'}
         """
         stats = self.session.getStatsObserver().getStats()
         return {

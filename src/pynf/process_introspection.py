@@ -13,6 +13,9 @@ def get_process_inputs(
 ) -> list[dict]:
     """Extract process inputs using Nextflow's native metadata API.
 
+    The helper toggles module mode, runs the script if necessary, and walks
+    each process to build channel definitions consumed by the CLI.
+
     Args:
         script_loader: Script loader that has parsed the script.
         script: Script instance returned by ``loader.getScript()``.
@@ -24,6 +27,10 @@ def get_process_inputs(
 
     Raises:
         Exception: If the script cannot be parsed for introspection.
+
+    Example:
+        >>> get_process_inputs(loader, script, ScriptMeta)
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}]
     """
     script_loader.setModule(True)
 
@@ -59,6 +66,10 @@ def _extract_process_inputs(process_def: Any) -> list[dict]:
 
     Returns:
         List of channel dictionaries with ``type`` and ``params``.
+
+    Example:
+        >>> _extract_process_inputs(process_def)
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}]
     """
     process_config = process_def.getProcessConfig()
     inputs = process_config.getInputs()
@@ -73,6 +84,10 @@ def _build_channel_info(input_def: Any) -> dict:
 
     Returns:
         Dictionary describing the channel and its parameters.
+
+    Example:
+        >>> _build_channel_info(input_def)
+        {'type': 'tuple', 'params': [...]}
     """
     channel_info = {"type": str(input_def.getTypeName()), "params": []}
 
@@ -92,6 +107,10 @@ def _extract_tuple_components(input_def: Any) -> list[dict[str, str]]:
 
     Returns:
         List of dictionaries containing ``type`` and ``name``.
+
+    Example:
+        >>> _extract_tuple_components(tuple_def)
+        [{'type': 'val', 'name': 'meta'}]
     """
     inner = input_def.getInner()
     return [
@@ -108,5 +127,9 @@ def _extract_simple_param(input_def: Any) -> dict[str, str]:
 
     Returns:
         Dictionary containing ``type`` and ``name``.
+
+    Example:
+        >>> _extract_simple_param(param_def)
+        {'type': 'path', 'name': 'reads'}
     """
     return {"type": str(input_def.getTypeName()), "name": str(input_def.getName())}

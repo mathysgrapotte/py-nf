@@ -13,6 +13,10 @@ class CLIContext:
     Attributes:
         cache_dir: Optional directory for cached module artifacts.
         github_token: Optional GitHub token for authenticated requests.
+
+    Example:
+        >>> CLIContext(cache_dir=Path("~/.cache/nf-core-modules"))
+        CLIContext(cache_dir=PosixPath('~/.cache/nf-core-modules'), github_token=None)
     """
 
     cache_dir: Path | None = None
@@ -23,7 +27,12 @@ def build_cli() -> object:
     """Construct and return the Click CLI application.
 
     Returns:
-        Click command group instance.
+        Click command group instance initialized with pynf commands and helpers.
+
+    Example:
+        >>> cli_group = build_cli()
+        >>> isinstance(cli_group, click.core.Group)
+        True
     """
     from .cli import cli
 
@@ -31,5 +40,11 @@ def build_cli() -> object:
 
 
 def main() -> None:
-    """CLI entry point."""
+    """Invoke the pynf CLI entry point.
+
+    Example:
+        >>> # Usually triggered via console_scripts entry point
+        >>> main()
+        # On success the CLI will exit with a zero status code.
+    """
     build_cli()()

@@ -5,6 +5,10 @@ from typing import Any, Iterable, Iterator, Sequence
 def flatten_paths(value: Any) -> Iterator[str]:
     """Yield string paths extracted from nested values.
 
+    Example:
+        >>> flatten_paths({'path': '/tmp/output.txt'})
+        '/tmp/output.txt'
+
     DEPENDS_ON:
     pynf.outputs._is_java_path_like
 
@@ -19,6 +23,10 @@ def collect_paths_from_events(
 ) -> list[str]:
     """Collect unique paths from observer events.
 
+    Example:
+        >>> collect_paths_from_events(workflow_events, file_events)
+        ['/data/output.txt']
+
     DEPENDS_ON:
     pynf.outputs.flatten_paths
     pynf.outputs.extend_unique
@@ -30,6 +38,10 @@ def collect_paths_from_events(
 
 def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
     """Fallback: collect files from task work directories.
+
+    Example:
+        >>> collect_paths_from_workdirs(['/tmp/workdir'])
+        ['/tmp/workdir/output.txt']
 
     DEPENDS_ON:
     pynf.outputs._iter_visible_files
@@ -44,6 +56,11 @@ def extend_unique(
 ) -> None:
     """Append unseen values while preserving order.
 
+    Example:
+        >>> extend_unique([], set(), ['a','b'])
+        >>> result_list
+        ['a','b']
+
     DEPENDS_ON:
     None
 
@@ -55,6 +72,10 @@ def extend_unique(
 def _iter_visible_files(workdir: str) -> Iterator[str]:
     """Yield visible files in a work directory.
 
+    Example:
+        >>> list(_iter_visible_files('/tmp/workdir'))
+        ['/tmp/workdir/out.txt']
+
     DEPENDS_ON:
     None
 
@@ -65,6 +86,10 @@ def _iter_visible_files(workdir: str) -> Iterator[str]:
 
 def _is_java_path_like(obj: Any) -> bool:
     """Return True when the object looks like a Java path or file.
+
+    Example:
+        >>> _is_java_path_like(java_path)
+        True
 
     DEPENDS_ON:
     None

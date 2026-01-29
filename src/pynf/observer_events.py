@@ -13,6 +13,11 @@ class WorkflowOutputCollector:
 
     This class is designed to be passed into a JPype proxy for Nextflow's
     ``TraceObserverV2`` interface.
+
+    Example:
+        >>> collector = WorkflowOutputCollector()
+        >>> collector.workflow_events()
+        []
     """
 
     def __init__(self) -> None:
@@ -72,15 +77,30 @@ class WorkflowOutputCollector:
         )
 
     def workflow_events(self) -> list[dict]:
-        """Return collected workflow output events."""
+        """Return collected workflow output events.
+
+        Example:
+            >>> collector.workflow_events()
+            [{'name': 'workflowFinished', 'value': {...}}]
+        """
         return list(self._workflow_events)
 
     def file_events(self) -> list[dict]:
-        """Return collected file publish events."""
+        """Return collected file publish events.
+
+        Example:
+            >>> collector.file_events()
+            [{'target': '/data/out.txt', 'source': '/tmp/.command.run', 'labels': {...}}]
+        """
         return list(self._file_events)
 
     def task_workdirs(self) -> list[str]:
-        """Return the list of task work directories."""
+        """Return the list of task work directories.
+
+        Example:
+            >>> collector.task_workdirs()
+            ['/tmp/work/1']
+        """
         return list(self._task_workdirs)
 
     def _record_task_workdir(self, event: Any, hook_name: str) -> None:

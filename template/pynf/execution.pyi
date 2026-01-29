@@ -7,7 +7,12 @@ from pynf.types import ExecutionRequest
 def execute_nextflow(
     request: ExecutionRequest, nextflow_jar_path: str | None = None
 ) -> Any:
-    """Execute a Nextflow script and return a structured result.
+    """Execute a Nextflow script and return a structured result while managing JVM/session lifecycle.
+
+    Example:
+        >>> request = ExecutionRequest(script_path=Path("main.nf"))
+        >>> execute_nextflow(request)
+        NextflowResult(...)
 
     DEPENDS_ON:
     pynf.runtime_config.resolve_nextflow_jar_path
@@ -33,7 +38,10 @@ def execute_nextflow(
     ...
 
 def _configure_docker(session: Any, docker_config: dict[str, Any]) -> None:
-    """Apply docker configuration to the Nextflow session config.
+    """Apply docker configuration maps to Nextflow session config before execution.
+
+    Example:
+        >>> _configure_docker(session, {"enabled": True, "registry": "quay.io"})
 
     DEPENDS_ON:
     None
@@ -46,7 +54,10 @@ def _configure_docker(session: Any, docker_config: dict[str, Any]) -> None:
 def _set_params_from_inputs(
     session: Any, input_channels: list[dict], inputs: list[dict]
 ) -> None:
-    """Map user inputs onto session params.
+    """Map user inputs onto session params using discovered channel metadata.
+
+    Example:
+        >>> _set_params_from_inputs(session, input_channels, [{"reads": "s.fastq"}])
 
     DEPENDS_ON:
     pynf.execution._convert_to_java_type
@@ -57,7 +68,11 @@ def _set_params_from_inputs(
     ...
 
 def _convert_to_java_type(value: Any, param_type: str) -> Any:
-    """Convert Python values into Java-compatible representations.
+    """Convert Python values into Java-compatible representations for session params.
+
+    Example:
+        >>> _convert_to_java_type("sample.fastq", "path")
+        'sample.fastq'
 
     DEPENDS_ON:
     None

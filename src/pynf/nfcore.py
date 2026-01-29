@@ -24,6 +24,10 @@ def resolve_cache_dir(cache_dir: Path | None) -> Path:
 
     Returns:
         Concrete cache directory path.
+
+    Example:
+        >>> resolve_cache_dir(None)
+        PosixPath('./nf-core-modules')
     """
     return cache_dir or DEFAULT_CACHE_DIR
 
@@ -36,6 +40,10 @@ def resolve_github_token(explicit_token: str | None) -> str | None:
 
     Returns:
         Token string or ``None`` when unavailable.
+
+    Example:
+        >>> resolve_github_token('abc123')
+        'abc123'
     """
     return explicit_token or os.getenv("GITHUB_TOKEN")
 
@@ -56,6 +64,10 @@ def download_module(
 
     Returns:
         ``NFCoreModule`` wrapper describing cached paths.
+
+    Example:
+        >>> download_module("nf-core/fastqc")
+        NFCoreModule(tool_name='nf-core/fastqc', local_path=PosixPath(...))
     """
     resolved_cache_dir = resolve_cache_dir(cache_dir)
     token = resolve_github_token(github_token)
@@ -74,6 +86,10 @@ def list_available_modules(
 
     Returns:
         Sorted list of module identifiers.
+
+    Example:
+        >>> list_available_modules()
+        ['nf-core/fastqc', 'nf-core/samtools']
     """
     resolved_cache_dir = resolve_cache_dir(cache_dir)
     token = resolve_github_token(github_token)
@@ -91,6 +107,10 @@ def list_available_submodules(
 
     Returns:
         Sorted list of submodule identifiers.
+
+    Example:
+        >>> list_available_submodules("nf-core/samtools")
+        ['view', 'sort']
     """
     token = resolve_github_token(github_token)
     return _list_submodules(module_name, token)
@@ -104,6 +124,10 @@ def get_rate_limit_status(github_token: str | None = None) -> dict:
 
     Returns:
         Mapping describing GitHub API rate limit state.
+
+    Example:
+        >>> get_rate_limit_status()
+        {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}
     """
     token = resolve_github_token(github_token)
     return _get_rate_limit_status(token)
@@ -132,7 +156,12 @@ class NFCoreModule:
         return self.local_path / "meta.yml"
 
     def exists(self) -> bool:
-        """Return ``True`` when the module's core files exist."""
+        """Return ``True`` when the module's core files exist.
+
+        Example:
+            >>> nf_module.exists()
+            True
+        """
         return self.main_nf.exists() and self.meta_yml.exists()
 
     @staticmethod
@@ -144,6 +173,10 @@ class NFCoreModule:
 
         Returns:
             ``NFCoreModule`` wrapper instance.
+
+        Example:
+            >>> NFCoreModule.from_paths(paths)
+            NFCoreModule(...)
         """
         return NFCoreModule(paths.module_id, paths.module_dir)
 
@@ -166,6 +199,10 @@ class NFCoreModuleManager:
 
         Returns:
             ``NFCoreModule`` wrapper instance.
+
+        Example:
+            >>> manager.download_module("nf-core/fastqc")
+            NFCoreModule(...)
         """
         return download_module(
             tool_name,
@@ -200,5 +237,9 @@ def download_nfcore_module(
 
     Returns:
         ``NFCoreModule`` wrapper instance.
+
+    Example:
+        >>> download_nfcore_module("nf-core/fastqc")
+        NFCoreModule(...)
     """
     return download_module(tool_name, cache_dir=cache_dir)

@@ -15,12 +15,19 @@ API_BASE = "https://api.github.com/repos/nf-core/modules/contents/modules/nf-cor
 def list_modules(cache_dir: Path, github_token: str | None) -> list[ModuleId]:
     """List top-level modules, using a local cache when available.
 
+    The cache is populated by querying the nf-core/modules GitHub repository when
+    missing, and the cached file is written for subsequent fast lookups.
+
     Args:
         cache_dir: Directory containing the cached modules list.
         github_token: Optional GitHub token for authenticated requests.
 
     Returns:
         Sorted list of module identifiers.
+
+    Example:
+        >>> list_modules(Path("/tmp/cache"), github_token=None)
+        ['nf-core/fastqc', 'nf-core/samtools']
     """
     cached = read_cached_modules_list(cache_dir)
     if cached:
@@ -41,6 +48,10 @@ def list_submodules(module_id: ModuleId, github_token: str | None) -> list[Modul
 
     Returns:
         Sorted list of module identifiers.
+
+    Example:
+        >>> list_submodules("nf-core/samtools", None)
+        ['view', 'sort']
     """
     entries = fetch_directory_entries(f"{API_BASE}/{module_id}", github_token)
     return _extract_directories(entries)
@@ -54,6 +65,10 @@ def get_rate_limit_status(github_token: str | None) -> dict:
 
     Returns:
         Mapping describing GitHub API rate limit state.
+
+    Example:
+        >>> get_rate_limit_status(None)
+        {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}
     """
     return fetch_rate_limit(github_token)
 
@@ -66,6 +81,10 @@ def _extract_directories(entries: list[dict]) -> list[ModuleId]:
 
     Returns:
         Sorted list of directory names.
+
+    Example:
+        >>> _extract_directories([{"name": "fastqc", "type": "dir"}])
+        ['fastqc']
     """
     directories = [item["name"] for item in entries if item.get("type") == "dir"]
     return sorted(directories)

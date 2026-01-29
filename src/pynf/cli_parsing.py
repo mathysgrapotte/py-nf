@@ -7,11 +7,12 @@ from typing import Any
 
 
 def parse_params_option(raw: str | None) -> dict[str, Any]:
-    """Parse the CLI params option into a dictionary.
+    """Parse the CLI ``--params`` option into a typed dictionary.
 
-    Accepts either a JSON object string or a comma-separated list of
-    ``key=value`` pairs. Each value is parsed as JSON when possible to allow
-    booleans, numbers, lists, and nested objects.
+    The option accepts either a JSON object string or a comma-separated list of
+    ``key=value`` pairs. When JSON parsing succeeds, rich objects like booleans,
+    numbers, lists, and nested dictionaries are preserved. The ``key=value``
+    fallback keeps values as strings when they cannot be parsed as JSON.
 
     Args:
         raw: Raw CLI parameter string or ``None``.
@@ -22,6 +23,12 @@ def parse_params_option(raw: str | None) -> dict[str, Any]:
     Raises:
         json.JSONDecodeError: If JSON parsing fails for a JSON object string.
         ValueError: If a ``key=value`` pair is missing the separator.
+
+    Example:
+        >>> parse_params_option('threads=4,debug=true')
+        {'threads': 4, 'debug': True}
+        >>> parse_params_option('{"threads": 4, "debug": true}')
+        {'threads': 4, 'debug': True}
     """
     if not raw:
         return {}
@@ -40,7 +47,10 @@ def parse_params_option(raw: str | None) -> dict[str, Any]:
 
 
 def parse_inputs_option(raw: str | None) -> list[dict[str, Any]] | None:
-    """Parse the CLI inputs option as a list of mappings.
+    """Parse the CLI ``--inputs`` option into a list of dictionaries.
+
+    The CLI accepts JSON representing a list of input group mappings, where each
+    mapping contains parameter names and values to feed into the Nextflow module.
 
     Args:
         raw: Raw CLI inputs JSON string or ``None``.
@@ -51,6 +61,10 @@ def parse_inputs_option(raw: str | None) -> list[dict[str, Any]] | None:
     Raises:
         json.JSONDecodeError: If the inputs string is not valid JSON.
         ValueError: If the parsed JSON is not a list.
+
+    Example:
+        >>> parse_inputs_option('[{"reads": ["a.fastq"]}]')
+        [{'reads': ['a.fastq']}]
     """
     if not raw:
         return None

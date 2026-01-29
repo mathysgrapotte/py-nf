@@ -15,6 +15,10 @@ def _auth_headers(github_token: str | None) -> dict[str, str]:
 
     Returns:
         Headers dictionary including the Authorization header when supplied.
+
+    Example:
+        >>> _auth_headers("token123")
+        {'Authorization': 'token token123'}
     """
     if not github_token:
         return {}
@@ -35,6 +39,10 @@ def fetch_directory_entries(
 
     Raises:
         ValueError: If the GitHub API request fails.
+
+    Example:
+        >>> fetch_directory_entries("https://api.github.com/...", None)
+        [{'name': 'fastqc', 'type': 'dir'}]
     """
     try:
         response = requests.get(
@@ -62,6 +70,10 @@ def fetch_raw_text(raw_url: str, github_token: str | None = None) -> str:
 
     Raises:
         ValueError: If the file does not exist or the request fails.
+
+    Example:
+        >>> fetch_raw_text("https://raw.githubusercontent.com/.../meta.yml")
+        'contents of meta.yml'
     """
     response = requests.get(raw_url, headers=_auth_headers(github_token))
     if response.status_code == 404:
@@ -81,6 +93,10 @@ def fetch_rate_limit(github_token: str | None) -> dict[str, Any]:
 
     Raises:
         ValueError: If the GitHub API request fails.
+
+    Example:
+        >>> fetch_rate_limit(None)
+        {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}
     """
     try:
         response = requests.get(
