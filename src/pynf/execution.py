@@ -18,8 +18,8 @@ from .runtime_config import (
     configure_logging,
     resolve_nextflow_jar_path,
 )
-from .types import DockerConfig, ExecutionRequest
-from .validation import validate_inputs
+from ._core.types import DockerConfig, ExecutionRequest
+from ._core.validation import validate_inputs
 
 logger = logging.getLogger(__name__)
 

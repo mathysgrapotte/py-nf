@@ -13,7 +13,7 @@ from .jvm_bridge import load_nextflow_classes, start_jvm_if_needed
 from .nfcore_modules import ModulePaths, ensure_module as _ensure_module
 from .process_introspection import get_process_inputs
 from .runtime_config import assert_nextflow_jar_exists, resolve_nextflow_jar_path
-from .types import ExecutionRequest, ModuleId
+from ._core.types import ExecutionRequest, ModuleId
 
 
 def ensure_module(

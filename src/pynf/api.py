@@ -12,7 +12,7 @@ from .nfcore_modules import list_submodules as _list_submodules
 from .module_service import get_module_inputs as _get_module_inputs
 from .module_service import inspect_module as _inspect_module
 from .module_service import run_nfcore_module
-from .types import ExecutionRequest, ModuleId
+from ._core.types import ExecutionRequest, ModuleId
 
 DEFAULT_CACHE_DIR = Path("./nf-core-modules")
 

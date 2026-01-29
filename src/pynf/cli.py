@@ -12,7 +12,7 @@ from rich.table import Table
 
 from . import api
 from .module_service import ensure_module
-from .types import DockerConfig, ExecutionRequest
+from ._core.types import DockerConfig, ExecutionRequest
 
 # Create a rich console for pretty printing
 console = Console()

@@ -16,8 +16,8 @@ from typing import Any
 
 from . import api
 from .result import NextflowResult
-from .types import DockerConfig, ExecutionRequest
-from .validation import validate_meta_map
+from ._core.types import DockerConfig, ExecutionRequest
+from ._core.validation import validate_meta_map
 
 __all__ = [
     "NextflowResult",
