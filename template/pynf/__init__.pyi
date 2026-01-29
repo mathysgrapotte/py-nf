@@ -1,6 +1,6 @@
-"""Public entry points for the pynf package.
+"""Public entry points for the pynf package (stubs).
 
-This stub mirrors ``src/pynf/__init__.py``.
+This file mirrors ``src/pynf/__init__.py``.
 """
 
 from __future__ import annotations
@@ -9,9 +9,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from pynf.result import NextflowResult
-from pynf.types import DockerConfig, ExecutionRequest
-from pynf.validation import validate_meta_map
+from pynf._core.result import NextflowResult
+from pynf._core.types import DockerConfig, ExecutionRequest
+from pynf._core.validation import validate_meta_map
 
 __all__: list[str]
 

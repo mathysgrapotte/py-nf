@@ -1,28 +1,17 @@
-"""nf-core modules: list, download/cache, and id normalization."""
+"""nf-core module catalog/cache/orchestration (stubs)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
-ModuleId = str
+from pynf._core.types import ExecutionRequest, ModuleId, ModulePaths
 
 API_BASE: str
 RAW_BASE: str
 MODULES_LIST_FILENAME: str
 
-
 def normalize_module_id(module_id: str) -> ModuleId: ...
-
-
-@dataclass(frozen=True)
-class ModulePaths:
-    module_id: ModuleId
-    module_dir: Path
-    main_nf: Path
-    meta_yml: Path
-
 
 def ensure_cache_dir(cache_dir: Path) -> Path: ...
 
@@ -40,10 +29,17 @@ def list_submodules(module_id: str, github_token: str | None) -> list[ModuleId]:
 
 def get_rate_limit_status(github_token: str | None) -> dict: ...
 
-def ensure_module(
+def ensure_module(cache_dir: Path, module_id: ModuleId, github_token: str | None, *, force: bool = ...) -> ModulePaths: ...
+
+def inspect_module(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> dict: ...
+
+def get_module_inputs(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> list[dict]: ...
+
+def run_nfcore_module(
     cache_dir: Path,
-    module_id: str,
+    module_id: ModuleId,
     github_token: str | None,
+    request: ExecutionRequest,
     *,
-    force: bool = ...,
-) -> ModulePaths: ...
+    force_download: bool = ...,
+) -> Any: ...
