@@ -25,7 +25,11 @@ logger = logging.getLogger(__name__)
 def execute_nextflow(
     request: ExecutionRequest, nextflow_jar_path: str | None = None
 ) -> Any:
-    """Execute a Nextflow script and return a structured result.
+    """Execute a Nextflow script and capture structured runtime outputs.
+
+    This function drives the full lifecycle: validating the request, ensuring the
+    JVM is bootstrapped, configuring logging, injecting parameters input groups,
+    wiring observers, and finally returning the wrapped ``NextflowResult``.
 
     Args:
         request: Immutable request describing the script execution.
@@ -33,6 +37,12 @@ def execute_nextflow(
 
     Returns:
         Execution result object (currently ``NextflowResult``).
+
+    Example:
+        >>> request = ExecutionRequest(script_path=Path("main.nf"))
+        >>> result = execute_nextflow(request)
+        >>> result.workflow_event_names()
+        ['workflowFinished']
     """
     jar_path = resolve_nextflow_jar_path(nextflow_jar_path)
     assert_nextflow_jar_exists(jar_path)
@@ -102,6 +112,10 @@ def _configure_docker(session: Any, docker_config: DockerConfig) -> None:
     Args:
         session: Nextflow session object.
         docker_config: Docker configuration values.
+
+    Example:
+        >>> config = DockerConfig(enabled=True, registry="quay.io")
+        >>> _configure_docker(session, config)
     """
     HashMap = jpype.JClass("java.util.HashMap")
     config = session.getConfig()
@@ -131,10 +145,17 @@ def _set_params_from_inputs(
 ) -> None:
     """Map user inputs onto the Nextflow session parameters.
 
+    Matches each input group to the channel definitions discovered via introspection
+    and coerces Python values into Nextflow-friendly types before inserting them
+    into the session binding.
+
     Args:
         session: Nextflow session instance.
         input_channels: Expected channel structures from the script.
         inputs: User-provided input groups.
+
+    Example:
+        >>> _set_params_from_inputs(session, input_channels, [{"reads": "sample.fa"}])
     """
     params_obj = session.getParams()
 
@@ -163,6 +184,10 @@ def _convert_to_java_type(value: Any, param_type: str) -> Any:
 
     Returns:
         Java-compatible value suitable for Nextflow.
+
+    Example:
+        >>> _convert_to_java_type(Path("sample.fastq"), "path")
+        'sample.fastq'
     """
     HashMap = jpype.JClass("java.util.HashMap")
 
