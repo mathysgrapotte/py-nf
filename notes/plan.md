@@ -11,6 +11,8 @@ import jpype
 import jpype.imports
 from pathlib import Path
 
+(Historical note: this plan referenced `NextflowEngine`, which has since been removed in favor of the functional API `ExecutionRequest` + `execute_nextflow`.)
+
 class NextflowEngine:
     def __init__(self, nextflow_jar_path="nextflow/build/libs/nextflow-all.jar"):
         # Start JVM with Nextflow classpath

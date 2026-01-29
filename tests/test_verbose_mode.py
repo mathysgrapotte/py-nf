@@ -1,36 +1,28 @@
-#!/usr/bin/env python3
-"""Test script to verify verbose mode shows debug output."""
+"""Regression tests for verbose mode.
+
+The functional API supports verbose logging via ExecutionRequest.verbose.
+"""
 
 from pathlib import Path
-from pynf import NextflowEngine
 
-def test_verbose_mode():
-    """Test with verbose=True to see debug output."""
-    print("\n" + "="*70)
-    print("VERBOSE MODE TEST")
-    print("="*70)
+import pytest
 
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
+from pynf.execution import execute_nextflow
+from pynf.types import ExecutionRequest
 
-    inputs = [
-        {'meta': {'id': 'sample1'}, 'input': 'test.bam', 'index': 'test.bam.bai'},
-        {'meta2': {'id': 'ref'}, 'fasta': 'reference.fa'},
-        {'qname': 'readnames.txt'},
-        {'index_format': 'bai'}
-    ]
 
-    try:
-        engine = NextflowEngine()
-        script_path = engine.load_script(script_path)
+def nextflow_jar_available() -> bool:
+    from pynf.runtime_config import resolve_nextflow_jar_path
+    jar = resolve_nextflow_jar_path(None)
+    return jar.exists()
 
-        print("\nExecuting with verbose=True...")
-        print("="*70)
-        result = engine.execute(script_path, inputs=inputs, executor="local", verbose=True)
-        print("="*70)
-        print("\n✓ Execution completed (you should see DEBUG messages above)")
 
-    except Exception as e:
-        print(f"Note: Execution failed but should have shown DEBUG output: {e}")
 
-if __name__ == "__main__":
-    test_verbose_mode()
+@pytest.mark.skipif(not nextflow_jar_available(), reason="Nextflow JAR not present; run python setup_nextflow.py")
+def test_verbose_mode_does_not_crash() -> None:
+    request = ExecutionRequest(
+        script_path=Path("nextflow_scripts/file-output-process.nf"),
+        verbose=True,
+    )
+    result = execute_nextflow(request)
+    assert isinstance(result.get_execution_report(), dict)

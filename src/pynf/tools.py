@@ -1,30 +1,28 @@
-"""
-Backend tools for nf-core module management.
+"""High-level convenience helpers for nf-core module workflows."""
 
-Provides convenient wrappers around NFCoreModuleManager for common tasks.
-"""
-
-import json
 from pathlib import Path
-from typing import Optional, Dict, Any
-import yaml
+from typing import Any, Dict, Optional
 
-from .nfcore import NFCoreModuleManager, NFCoreModule
+from . import api
+from .nfcore import NFCoreModule, download_module as download_nfcore_module
+from .types import DockerConfig, ExecutionRequest
 
 
-def list_modules(cache_dir: Optional[Path] = None, github_token: Optional[str] = None) -> list[str]:
-    """
-    List all available nf-core modules.
+def list_modules(
+    cache_dir: Optional[Path] = None, github_token: Optional[str] = None
+) -> list[str]:
+    """List available nf-core modules.
 
     Args:
-        cache_dir: Directory to cache modules
-        github_token: Optional GitHub token for rate limiting
+        cache_dir: Directory to cache modules.
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        Sorted list of module names
+        Sorted list of module identifiers.
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.list_available_modules()
+    return api.list_modules(
+        cache_dir=cache_dir or api.DEFAULT_CACHE_DIR, github_token=github_token
+    )
 
 
 def list_submodules(
@@ -32,19 +30,17 @@ def list_submodules(
     cache_dir: Optional[Path] = None,
     github_token: Optional[str] = None,
 ) -> list[str]:
-    """
-    List submodules available in a given module.
+    """List submodules available in a given module.
 
     Args:
-        module: Module name (e.g., 'samtools')
-        cache_dir: Directory to cache modules
-        github_token: Optional GitHub token for rate limiting
+        module: Parent module identifier (e.g., ``samtools``).
+        cache_dir: Optional cache directory override.
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        Sorted list of submodule names
+        Sorted list of submodule identifiers.
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.list_submodules(module)
+    return api.list_submodules(module, github_token=github_token)
 
 
 def download_module(
@@ -53,23 +49,23 @@ def download_module(
     force: bool = False,
     github_token: Optional[str] = None,
 ) -> NFCoreModule:
-    """
-    Download an nf-core module.
+    """Download an nf-core module.
 
     Args:
-        module: Module name (e.g., 'fastqc' or 'samtools/view')
-        cache_dir: Directory to cache modules
-        force: Force re-download even if cached
-        github_token: Optional GitHub token for rate limiting
+        module: Module identifier (e.g., ``fastqc`` or ``samtools/view``).
+        cache_dir: Optional cache directory override.
+        force: Force re-download even if cached.
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        NFCoreModule object with paths to downloaded files
-
-    Raises:
-        ValueError: If module doesn't exist or download fails
+        ``NFCoreModule`` wrapper describing cached files.
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-    return manager.download_module(module, force=force)
+    return download_nfcore_module(
+        module,
+        cache_dir=cache_dir,
+        github_token=github_token,
+        force=force,
+    )
 
 
 def inspect_module(
@@ -77,56 +73,18 @@ def inspect_module(
     cache_dir: Optional[Path] = None,
     github_token: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Inspect a downloaded module and return its metadata.
-
-    If module is not cached locally, it will be downloaded.
+    """Inspect a downloaded module and return its metadata.
 
     Args:
-        module: Module name
-        cache_dir: Directory to cache modules
-        github_token: Optional GitHub token for rate limiting
+        module: Module identifier.
+        cache_dir: Optional cache directory override.
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        Dictionary with keys:
-        - 'name': Module name
-        - 'path': Path to module directory
-        - 'meta': Parsed meta.yml as dictionary
-        - 'main_nf_lines': Number of lines in main.nf
-        - 'main_nf_preview': First 20 lines of main.nf
-
-    Raises:
-        ValueError: If module cannot be downloaded or inspected
+        Dictionary containing module metadata and file previews.
     """
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-
-    # Ensure module is cached
-    nf_module = manager.download_module(module)
-
-    # Read and parse meta.yml
-    try:
-        meta_content = nf_module.meta_yml.read_text()
-        meta_dict = yaml.safe_load(meta_content)
-    except Exception as e:
-        raise ValueError(f"Failed to parse meta.yml: {e}")
-
-    # Read main.nf
-    try:
-        main_content = nf_module.main_nf.read_text()
-        main_lines = main_content.split("\n")
-        main_preview = main_lines[:20]
-        main_line_count = len(main_lines)
-    except Exception as e:
-        raise ValueError(f"Failed to read main.nf: {e}")
-
-    return {
-        "name": module,
-        "path": str(nf_module.local_path),
-        "meta": meta_dict,
-        "meta_raw": meta_content,
-        "main_nf_lines": main_line_count,
-        "main_nf_preview": main_preview,
-    }
+    cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
+    return api.inspect_module(module, cache_dir=cache_dir, github_token=github_token)
 
 
 def get_module_inputs(
@@ -134,104 +92,50 @@ def get_module_inputs(
     cache_dir: Optional[Path] = None,
     github_token: Optional[str] = None,
 ) -> list[Dict[str, Any]]:
-    """
-    Extract input parameters from a module's main.nf using Nextflow native API.
-
-    If module is not cached locally, it will be downloaded.
+    """Extract input parameters from a module's ``main.nf``.
 
     Args:
-        module: Module name
-        cache_dir: Directory to cache modules
-        github_token: Optional GitHub token for rate limiting
+        module: Module identifier.
+        cache_dir: Optional cache directory override.
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        List of input channel definitions:
-        [{'type': str, 'params': [{'type': str, 'name': str}]}]
-
-    Raises:
-        ValueError: If module cannot be downloaded or inputs cannot be extracted
+        List of input channel definitions.
     """
-    import jpype
-    from .engine import NextflowEngine
-
-    manager = NFCoreModuleManager(cache_dir=cache_dir, github_token=github_token)
-
-    # Ensure module is cached
-    nf_module = manager.download_module(module)
-
-    # Create engine and extract inputs using native API
-    try:
-        engine = NextflowEngine()
-
-        # Set up Nextflow session
-        Session = jpype.JClass("nextflow.Session")
-        ScriptFile = jpype.JClass("nextflow.script.ScriptFile")
-        ArrayList = jpype.JClass("java.util.ArrayList")
-
-        session = Session()
-        script_file = ScriptFile(jpype.java.nio.file.Paths.get(str(nf_module.main_nf)))
-        session.init(script_file, ArrayList(), None, None)
-        session.start()
-
-        # Load and parse script
-        loader = engine.ScriptLoaderFactory.create(session)
-        java_path = jpype.java.nio.file.Paths.get(str(nf_module.main_nf))
-        loader.parse(java_path)
-        script = loader.getScript()
-
-        # Extract inputs using native API
-        inputs = engine._get_process_inputs(loader, script)
-
-        # Cleanup
-        session.destroy()
-
-        return inputs
-
-    except Exception as e:
-        raise ValueError(f"Failed to extract inputs from main.nf: {e}")
+    cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
+    return api.get_module_inputs(module, cache_dir=cache_dir, github_token=github_token)
 
 
 def module_exists_locally(
     module: str,
     cache_dir: Optional[Path] = None,
 ) -> bool:
-    """
-    Check if a module exists in the local cache.
+    """Check if a module exists in the local cache.
 
     Args:
-        module: Module name
-        cache_dir: Directory to cache modules (defaults to ./nf-core-modules)
+        module: Module identifier.
+        cache_dir: Optional cache directory override.
 
     Returns:
-        True if module is cached locally, False otherwise
+        ``True`` when the module appears cached locally.
     """
-    if cache_dir is None:
-        cache_dir = Path("./nf-core-modules")
-
+    cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
     module_dir = cache_dir / module
-    main_nf = module_dir / "main.nf"
-    meta_yml = module_dir / "meta.yml"
-
-    return main_nf.exists() and meta_yml.exists()
+    return (module_dir / "main.nf").exists() and (module_dir / "meta.yml").exists()
 
 
 def get_rate_limit_status(
     github_token: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Get current GitHub API rate limit status.
+    """Return GitHub API rate limit status.
 
     Args:
-        github_token: Optional GitHub token
+        github_token: Optional GitHub token for authenticated requests.
 
     Returns:
-        Dictionary with 'limit', 'remaining', and 'reset_time' (Unix timestamp)
-
-    Raises:
-        ValueError: If GitHub API request fails
+        Mapping describing GitHub API rate limit state.
     """
-    manager = NFCoreModuleManager(github_token=github_token)
-    return manager.get_rate_limit_status()
+    return api.get_rate_limit_status(github_token)
 
 
 def run_nfcore_module(
@@ -244,49 +148,33 @@ def run_nfcore_module(
     github_token: Optional[str] = None,
     verbose: bool = False,
 ):
-    """
-    Run an nf-core module with automatic download if needed.
+    """Run an nf-core module with automatic download if needed.
 
     Args:
-        module: Module name (e.g., 'fastqc')
-        inputs: List of dicts, each dict contains parameter names and values for one input channel
-               Example: [{'meta': {...}, 'reads': ['file1.fastq', 'file2.fastq']}]
-        params: Dictionary of parameters
-        executor: Nextflow executor type (default: 'local')
-        docker_enabled: Enable Docker execution
-        cache_dir: Directory to cache modules
-        github_token: Optional GitHub token
-        verbose: Enable verbose debug output (default: False)
+        module: Module identifier (e.g., ``fastqc``).
+        inputs: List of input group mappings.
+        params: Mapping of script parameters.
+        executor: Nextflow executor name.
+        docker_enabled: Whether to enable Docker execution.
+        cache_dir: Optional cache directory override.
+        github_token: Optional GitHub token for authenticated requests.
+        verbose: Enable verbose debug output.
 
     Returns:
-        NextflowResult object from execution
-
-    Raises:
-        ValueError: If module cannot be found/downloaded
+        Execution result object (currently ``NextflowResult``).
     """
-    from pynf import run_module
-
-    # Download module if not cached
-    nf_module = download_module(
-        module,
-        cache_dir=cache_dir,
-        github_token=github_token,
+    cache_dir = cache_dir or api.DEFAULT_CACHE_DIR
+    docker_config = (
+        DockerConfig(enabled=True, registry="quay.io") if docker_enabled else None
     )
-
-    # Configure Docker if enabled
-    docker_config = None
-    if docker_enabled:
-        docker_config = {
-            "enabled": True,
-            "registry": "quay.io",
-        }
-
-    # Execute the module
-    return run_module(
-        str(nf_module.main_nf),
-        inputs=inputs,
-        params=params,
+    request = ExecutionRequest(
+        script_path=Path(module),
         executor=executor,
-        docker_config=docker_config,
+        params=params,
+        inputs=inputs,
+        docker=docker_config,
         verbose=verbose,
+    )
+    return api.run_module(
+        module, request, cache_dir=cache_dir, github_token=github_token
     )

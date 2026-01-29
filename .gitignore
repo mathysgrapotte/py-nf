@@ -25,3 +25,9 @@ nf_core_list_cache/
 # pynf-agent workspace
 agent_workspace/
 *.gz
+
+# Test data (downloaded on demand)
+test.bam
+test.bam.bai
+reference.fa
+readnames.txt

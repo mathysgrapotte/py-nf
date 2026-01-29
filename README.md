@@ -84,18 +84,36 @@ uv run pytest tests/test_integration.py::test_file_output_process_outputs_output
 
 You should see `output.txt` captured in Python without tunnelling through the work directory.
 
+### Module test data (samtools/view)
+
+The samtools/view validation and verbose scripts expect local input files in the
+repo root. The files are gitignored so you can download them on demand:
+
+```bash
+curl -fL -o test.bam "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam"
+curl -fL -o test.bam.bai "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam.bai"
+curl -fL -o reference.fa "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/genomics/homo_sapiens/genome/genome.fasta"
+printf "read1\n" > readnames.txt
+```
+
+These inputs are used by:
+
+- `tests/test_multi_input_validation.py`
+- `tests/test_verbose_mode.py`
+
 
 ## Quick start
 
 ```python
 from pathlib import Path
 
-from pynf import NextflowEngine, run_module
+from pynf import run_module
+from pynf.execution import execute_nextflow
+from pynf.types import ExecutionRequest
 
-# Option 1 — manual control
-engine = NextflowEngine()
-script_path = engine.load_script("nextflow_scripts/file-output-process.nf")
-result = engine.execute(script_path)
+# Option 1 — functional API
+request = ExecutionRequest(script_path=Path("nextflow_scripts/file-output-process.nf"))
+result = execute_nextflow(request)
 
 print("Files published:", result.get_output_files())
 print("Structured workflow outputs:", result.get_workflow_outputs())
@@ -401,29 +419,9 @@ Specify with `--model` flag or in the `BioinformaticsAgent` constructor.
 
 ## API tour
 
-### `pynf.NextflowEngine`
-
-| Method | Description |
-| --- | --- |
-| `__init__(nextflow_jar_path=...)` | Starts the JVM (if needed) with the Nextflow jar in the classpath and caches the key Nextflow classes (`Session`, `ScriptLoaderFactory`, etc.). |
-| `load_script(path)` | Returns a `pathlib.Path` pointing to the `.nf` file. No parsing occurs yet; this is mostly a convenience to keep a common entry point for module vs. script workflows. |
-| `execute(path, executor="local", params=None, input_files=None, config=None)` | Spins up a real `nextflow.Session`, registers an internal observer, parses the script with `ScriptLoaderV2`, and runs it. Returns a `NextflowResult`. Parameters and input channels are pushed into the session binding before execution. |
-
-Execution sequence inside `execute`:
-
-1. Instantiate `nextflow.Session` and call `session.init(...)` with the script file.
-2. `session.start()` creates the executor service and registers built-in observers.
-3. Optional `params` and `input_files` are loaded into the binding (`session.getBinding().setVariable`).
-4. `ScriptLoaderFactory.create(session).parse(path)` builds the AST and decides whether the file is a DSL2 script or a raw module.
-5. A custom `TraceObserverV2` proxy (`_WorkflowOutputCollector`) is appended to `session.observersV2` so we capture `WorkflowOutputEvent` and `FilePublishEvent` callbacks.
-6. `loader.runScript()` executes the Groovy stub. For raw modules (no `workflow {}`) Nextflow automatically emits a workflow block for the single entry process — no extra handling is required.
-7. `session.fireDataflowNetwork(False)` ignites the dataflow network, mirroring what the CLI does.
-8. `session.await_()` (Nextflow's async await) blocks until all tasks finish.
-9. The observer is removed to avoid leaking proxies between runs.
-
 ### `pynf.NextflowResult`
 
-Returned by `NextflowEngine.execute`. Important accessors:
+Returned by `pynf.execution.execute_nextflow`. Important accessors:
 
 | Method | Purpose |
 | --- | --- |
@@ -448,15 +446,15 @@ Returned by `NextflowEngine.execute`. Important accessors:
 
 ## Working with raw modules (.nf without `workflow {}`)
 
-* Nextflow automatically wraps a single-process module in a synthetic workflow; our engine does **not** force `ScriptMeta.isModule()` like previous iterations. As long as you call `engine.execute(...)` the implicit workflow is triggered.
+* Nextflow automatically wraps a single-process module in a synthetic workflow; our engine does **not** force `ScriptMeta.isModule()` like previous iterations. As long as you call `execute_nextflow(ExecutionRequest(...))` the implicit workflow is triggered.
 * The integration test `tests/test_integration.py::test_file_output_process_outputs_output_txt` demonstrates this: the raw module in `nextflow_scripts/file-output-process.nf` produces `output.txt`, and the observer captures it without having to add a manual `workflow { writeFile() }` block.
 
 
 ## Caveats & tips
 
-* **JVM lifecycle** – The first `NextflowEngine` instantiation starts the JVM. Subsequent instances reuse it; shutting it down requires killing the Python process.
+* **JVM lifecycle** – The first call to `execute_nextflow` starts the JVM. Subsequent instances reuse it; shutting it down requires killing the Python process.
 * **JPype warnings** – You may see warnings about restricted native access or `sun.misc.Unsafe`. They are benign for now but you can silence them by launching Python with `JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED`.
-* **Session reuse** – Each `execute` call spins up a fresh `nextflow.Session`. Reuse a single `NextflowEngine` across runs to avoid re-starting the JVM, but do not reuse a `NextflowResult` once the session is destroyed.
+* **Session reuse** – Each `execute` call spins up a fresh `nextflow.Session`. Reuse the same Python process across runs to avoid re-starting the JVM, but do not reuse a `NextflowResult` once the session is destroyed.
 * **Inputs & params** – `input_files` currently sets a single channel named `input`. If your module expects more complex channel wiring you can adapt the helper or push additional channels via `session.getBinding().setVariable` before `loader.runScript()`.
 * **Work directory cleanup** – Nextflow will keep its `.nextflow` and `work/` directories unless you remove them. The fallback scanner reads from `session.getWorkDir()`, so deleting the workdir during execution will break the legacy path collection.
 * **Nextflow versions** – The observer wiring relies on `TraceObserverV2` (available in Nextflow 23.10+). Running against an earlier jar will fail when we attempt to access `Session.observersV2`.

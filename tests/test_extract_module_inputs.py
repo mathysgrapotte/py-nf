@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
+"""Tests for extracting input information from a Nextflow module.
+
+This uses the same underlying approach as the runner: start the JVM, parse the
+script with Nextflow's ScriptLoader, and extract input channel metadata via
+`ScriptMeta`.
+
+The old NextflowEngine wrapper was removed; this test calls the lower-level
+helpers directly.
 """
-Test script demonstrating the Nextflow native API for extracting input information
-from nf-core modules using the NextflowEngine helper functions.
-"""
+
+from pathlib import Path
 
 import jpype
-from pathlib import Path
-from pynf import NextflowEngine
+import pytest
 
-def test_native_api_input_extraction():
-    """Test native API input extraction using NextflowEngine."""
+from pynf.jvm_bridge import load_nextflow_classes, start_jvm_if_needed
+from pynf.process_introspection import get_process_inputs
+from pynf.runtime_config import assert_nextflow_jar_exists, resolve_nextflow_jar_path
 
-    # Test with samtools/view module
-    script_path = Path("nf-core-modules/samtools/view/main.nf")
-    print(f"Testing with: {script_path}")
-    print("=" * 70)
 
-    # Create engine
-    engine = NextflowEngine()
+def nextflow_jar_available() -> bool:
+    from pynf.runtime_config import resolve_nextflow_jar_path
+    jar = resolve_nextflow_jar_path(None)
+    return jar.exists()
 
-    # Set up Nextflow session
-    Session = jpype.JClass("nextflow.Session")
+
+
+@pytest.mark.skipif(not nextflow_jar_available(), reason="Nextflow JAR not present; run python setup_nextflow.py")
+def test_native_api_input_extraction() -> None:
+    script_path = Path("test_nfcore_cache/samtools/view/main.nf")
+
+    jar_path = resolve_nextflow_jar_path(None)
+    assert_nextflow_jar_exists(jar_path)
+    start_jvm_if_needed(jar_path)
+
+    classes = load_nextflow_classes()
+    Session = classes["Session"]
+    ScriptLoaderFactory = classes["ScriptLoaderFactory"]
+    ScriptMeta = classes["ScriptMeta"]
+
     ScriptFile = jpype.JClass("nextflow.script.ScriptFile")
     ArrayList = jpype.JClass("java.util.ArrayList")
 
@@ -29,42 +47,17 @@ def test_native_api_input_extraction():
     session.init(script_file, ArrayList(), None, None)
     session.start()
 
-    # Load and parse script
-    loader = engine.ScriptLoaderFactory.create(session)
+    loader = ScriptLoaderFactory.create(session)
     java_path = jpype.java.nio.file.Paths.get(str(script_path))
     loader.parse(java_path)
     script = loader.getScript()
 
-    print(f"✓ Script loaded: {script}")
+    inputs = get_process_inputs(loader, script, ScriptMeta)
+    assert isinstance(inputs, list)
+    assert len(inputs) >= 1
 
-    # Extract inputs using our helper functions
-    print("\nExtracting inputs using native API...")
-    inputs = engine._get_process_inputs(loader, script)
-
-    # Display results
-    print(f"\n✓ Found {len(inputs)} input channels:")
-    print("=" * 70)
-
-    for i, input_channel in enumerate(inputs):
-        channel_type = input_channel['type']
-        params = input_channel['params']
-
-        print(f"\nInput Channel #{i + 1}: {channel_type}")
-        print(f"  Parameters ({len(params)}):")
-        for param in params:
-            print(f"    - {param['type']}({param['name']})")
-
-    # Cleanup
     session.destroy()
 
-    print("\n" + "=" * 70)
-    print("✓ Test completed successfully!")
-    print("=" * 70)
 
 if __name__ == "__main__":
-    try:
-        test_native_api_input_extraction()
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+    raise SystemExit("Run with pytest")
