@@ -26,10 +26,14 @@ import yaml
 
 from .github_api import fetch_directory_entries, fetch_raw_text, fetch_rate_limit
 from .types import ExecutionRequest, ModuleId, ModulePaths
-from ..execution import execute_nextflow
-from ..jvm_bridge import load_nextflow_classes, start_jvm_if_needed
-from ..process_introspection import get_process_inputs
-from ..runtime_config import assert_nextflow_jar_exists, resolve_nextflow_jar_path
+from .execution import (
+    assert_nextflow_jar_exists,
+    execute_nextflow,
+    get_process_inputs,
+    load_nextflow_classes,
+    resolve_nextflow_jar_path,
+    start_jvm_if_needed,
+)
 
 API_BASE = "https://api.github.com/repos/nf-core/modules/contents/modules/nf-core"
 RAW_BASE = "https://raw.githubusercontent.com/nf-core/modules/master/modules/nf-core"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .execution import execute_nextflow
+from ._core.execution import execute_nextflow
 from ._core.nfcore_modules import get_rate_limit_status as _get_rate_limit_status
 from ._core.nfcore_modules import list_modules as _list_modules
 from ._core.nfcore_modules import list_submodules as _list_submodules
