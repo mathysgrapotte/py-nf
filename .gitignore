@@ -12,11 +12,12 @@ wheels/
 # Environment variables
 .env
 
-# Nextflow
-nextflow/
-work/
-.nextflow/
-.nextflow.log*
+# Nextflow runtime artifacts
+# Note: do NOT ignore docs/nextflow/ (developer documentation lives there)
+/nextflow/
+/work/
+/.nextflow/
+/.nextflow.log*
 
 # nf-core modules cache
 nf-core-modules/

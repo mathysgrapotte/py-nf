@@ -1,50 +1,59 @@
-"""Public entry points for the pynf package."""
+"""Public entry points for the pynf package.
+
+This package is intentionally **functional-first**: most users should only need
+``pynf`` (or ``pynf.api``) functions plus a couple of dataclasses.
+
+Design principle:
+- Keep the public surface small and easy to discover.
+- Hide implementation details behind ``pynf.api``.
+"""
+
+from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Mapping
 from typing import Any
 
 from . import api
-from .validation import validate_meta_map
-from .nfcore import NFCoreModule, NFCoreModuleManager, download_nfcore_module
-from .result import NextflowResult
-from .types import DockerConfig, ExecutionRequest
+from ._core.result import NextflowResult
+from ._core.types import DockerConfig, ExecutionRequest
+from ._core.validation import validate_meta_map
 
 __all__ = [
     "NextflowResult",
-    "run_module",
-    "run_script",
-    "run_nfcore_module",
-    "read_output_file",
-    "download_nfcore_module",
-    "NFCoreModule",
-    "NFCoreModuleManager",
     "DockerConfig",
     "ExecutionRequest",
     "validate_meta_map",
+    # Public functional API
+    "run_script",
+    "run_module",
+    "run_nfcore_module",
+    "read_output_file",
 ]
 
 
-def run_module(
-    nf_file,
+def run_script(
+    nf_file: str | Path,
     inputs=None,
     params=None,
-    executor="local",
-    docker_config=None,
-    verbose=False,
-):
-    """Execute a Nextflow script with a simple one-liner API.
+    executor: str = "local",
+    docker_config: Mapping[str, Any] | DockerConfig | None = None,
+    verbose: bool = False,
+) -> NextflowResult:
+    """Execute an arbitrary Nextflow script.
+
+    This is a convenience wrapper around :func:`pynf.api.run_script`.
 
     Args:
-        nf_file: Path to the Nextflow script.
-        inputs: Optional list of input group mappings.
+        nf_file: Path to a Nextflow script.
+        inputs: Optional list of input-group mappings.
         params: Optional mapping of script parameters.
         executor: Nextflow executor name.
-        docker_config: Optional Docker configuration mapping.
+        docker_config: Optional Docker configuration mapping or dataclass.
         verbose: Enable verbose debug output.
 
     Returns:
-        Execution result object (currently ``NextflowResult``).
+        ``NextflowResult``.
     """
     request = ExecutionRequest(
         script_path=Path(nf_file),
@@ -57,16 +66,19 @@ def run_module(
     return api.run_script(request)
 
 
-def run_script(
-    nf_file,
+def run_module(
+    nf_file: str | Path,
     inputs=None,
     params=None,
-    executor="local",
-    docker_config=None,
-    verbose=False,
-):
-    """Alias for ``run_module`` when executing raw scripts."""
-    return run_module(
+    executor: str = "local",
+    docker_config: Mapping[str, Any] | DockerConfig | None = None,
+    verbose: bool = False,
+) -> NextflowResult:
+    """Alias for :func:`run_script`.
+
+    Kept for users who prefer the "run a module" naming even for raw scripts.
+    """
+    return run_script(
         nf_file,
         inputs=inputs,
         params=params,
@@ -82,18 +94,18 @@ def run_nfcore_module(
     cache_dir: Path = api.DEFAULT_CACHE_DIR,
     github_token: str | None = None,
     force_download: bool = False,
-):
-    """Execute an nf-core module via the public API.
+) -> NextflowResult:
+    """Download (if needed) and run an nf-core module.
 
     Args:
-        module_id: Module identifier.
-        request: Execution request describing module inputs.
+        module_id: Module id (canonical form is without the ``nf-core/`` prefix).
+        request: Execution request describing inputs and execution options.
         cache_dir: Directory for cached module artifacts.
         github_token: Optional GitHub token for authenticated requests.
         force_download: When ``True``, re-download the module.
 
     Returns:
-        Execution result object (currently ``NextflowResult``).
+        ``NextflowResult``.
     """
     return api.run_module(
         module_id,
@@ -104,32 +116,15 @@ def run_nfcore_module(
     )
 
 
-def read_output_file(file_path):
-    """Read contents of an output file.
-
-    Args:
-        file_path: Path to the output file.
-
-    Returns:
-        File contents.
-
-    Raises:
-        OSError: If the file cannot be read.
-    """
+def read_output_file(file_path: str | Path) -> str:
+    """Read contents of an output file."""
     return api.read_output_file(Path(file_path))
 
 
 def _coerce_docker_config(
     docker_config: Mapping[str, Any] | DockerConfig | None,
 ) -> DockerConfig | None:
-    """Normalize docker configuration mappings into ``DockerConfig``.
-
-    Args:
-        docker_config: Docker configuration mapping or dataclass.
-
-    Returns:
-        ``DockerConfig`` instance or ``None``.
-    """
+    """Normalize docker configuration mappings into ``DockerConfig``."""
     if docker_config is None:
         return None
     if isinstance(docker_config, DockerConfig):

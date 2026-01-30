@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .execution import execute_nextflow
-from .module_catalog import get_rate_limit_status as _get_rate_limit_status
-from .module_catalog import list_modules as _list_modules
-from .module_catalog import list_submodules as _list_submodules
-from .module_service import get_module_inputs as _get_module_inputs
-from .module_service import inspect_module as _inspect_module
-from .module_service import run_nfcore_module
-from .types import ExecutionRequest, ModuleId
+from ._core.execution import execute_nextflow
+from ._core.nfcore_modules import get_rate_limit_status as _get_rate_limit_status
+from ._core.nfcore_modules import list_modules as _list_modules
+from ._core.nfcore_modules import list_submodules as _list_submodules
+from ._core.nfcore_modules import get_module_inputs as _get_module_inputs
+from ._core.nfcore_modules import inspect_module as _inspect_module
+from ._core.nfcore_modules import run_nfcore_module
+from ._core.types import ExecutionRequest, ModuleId
 
 DEFAULT_CACHE_DIR = Path("./nf-core-modules")
 
@@ -58,7 +58,7 @@ def run_module(
 
     Example:
         >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
-        >>> run_module("nf-core/fastqc", request)
+        >>> run_module("fastqc", request)
         NextflowResult(...)
     """
     return run_nfcore_module(
@@ -81,19 +81,10 @@ def list_modules(
 
     Returns:
         Sorted list of module identifiers.
-    """
-    """List available modules, using cache when possible.
-
-    Args:
-        cache_dir: Cache directory for module metadata.
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Sorted list of module identifiers.
 
     Example:
         >>> list_modules(Path("/tmp/modules"))
-        ['nf-core/fastqc', 'nf-core/samtools']
+        ['fastqc', 'samtools']
     """
     return _list_modules(cache_dir, github_token)
 
@@ -107,18 +98,9 @@ def list_submodules(module_id: ModuleId, github_token: str | None = None) -> lis
 
     Returns:
         Sorted list of submodule identifiers.
-    """
-    """List submodules under a module identifier.
-
-    Args:
-        module_id: Module identifier.
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Sorted list of submodule identifiers.
 
     Example:
-        >>> list_submodules("nf-core/samtools")
+        >>> list_submodules("samtools")
         ['view', 'sort']
     """
     return _list_submodules(module_id, github_token)
@@ -140,8 +122,8 @@ def inspect_module(
         Dictionary describing the module files and metadata.
 
     Example:
-        >>> inspect_module("nf-core/fastqc")
-        {'name': 'nf-core/fastqc', 'meta': {...}, ...}
+        >>> inspect_module("fastqc")
+        {'name': 'fastqc', 'meta': {...}, ...}
     """
     return _inspect_module(cache_dir, module_id, github_token)
 
@@ -162,21 +144,13 @@ def get_module_inputs(
         List of input channel definitions.
 
     Example:
-        >>> get_module_inputs("nf-core/fastqc")
+        >>> get_module_inputs("fastqc")
         [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}, ...]
     """
     return _get_module_inputs(cache_dir, module_id, github_token)
 
 
 def get_rate_limit_status(github_token: str | None = None) -> dict:
-    """Return GitHub API rate limit status.
-
-    Args:
-        github_token: Optional GitHub token for authenticated requests.
-
-    Returns:
-        Mapping describing GitHub API rate limit state.
-    """
     """Return GitHub API rate limit status.
 
     Args:
