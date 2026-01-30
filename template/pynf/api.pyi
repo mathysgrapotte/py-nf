@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+
+from ._core.types import ExecutionRequest, ModuleId
+
+DEFAULT_CACHE_DIR: Path
 
 def run_script(request: ExecutionRequest, nextflow_jar_path: str | None = None) -> Any:
     """Execute an arbitrary Nextflow script.
 
-Args:
-    request: Execution request describing the script execution.
-    nextflow_jar_path: Optional override for the Nextflow JAR path.
+        Args:
+            request: Execution request describing the script execution.
+            nextflow_jar_path: Optional override for the Nextflow JAR path.
 
-Returns:
-    Execution result object (currently ``NextflowResult``).
+    Returns:
+        Execution result object (``NextflowResult`` or ``SeqeraResult``).
 
-Example:
-    >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
-    >>> run_script(request)
-    NextflowResult(...)"""
+        Example:
+            >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
+            >>> run_script(request)
+            NextflowResult(...)"""
     ...
 
 def run_module(
@@ -29,22 +34,22 @@ def run_module(
 ) -> Any:
     """Ensure a module is cached, then execute it.
 
-Args:
-    module_id: Module identifier.
-    request: Execution request describing inputs and options. The
-        ``script_path`` value is ignored and replaced with the module's
-        ``main.nf`` path.
-    cache_dir: Cache directory for module artifacts.
-    github_token: Optional GitHub token for authenticated requests.
-    force_download: When ``True``, re-download the module.
+        Args:
+            module_id: Module identifier.
+            request: Execution request describing inputs and options. The
+                ``script_path`` value is ignored and replaced with the module's
+                ``main.nf`` path.
+            cache_dir: Cache directory for module artifacts.
+            github_token: Optional GitHub token for authenticated requests.
+            force_download: When ``True``, re-download the module.
 
-Returns:
-    Execution result object (currently ``NextflowResult``).
+    Returns:
+        Execution result object (``NextflowResult`` or ``SeqeraResult``).
 
-Example:
-    >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
-    >>> run_module("fastqc", request)
-    NextflowResult(...)"""
+        Example:
+            >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
+            >>> run_module("fastqc", request)
+            NextflowResult(...)"""
     ...
 
 def list_modules(
@@ -52,31 +57,31 @@ def list_modules(
 ) -> list[str]:
     """List available modules, using cache when possible.
 
-Args:
-    cache_dir: Cache directory for module metadata.
-    github_token: Optional GitHub token for authenticated requests.
+    Args:
+        cache_dir: Cache directory for module metadata.
+        github_token: Optional GitHub token for authenticated requests.
 
-Returns:
-    Sorted list of module identifiers.
+    Returns:
+        Sorted list of module identifiers.
 
-Example:
-    >>> list_modules(Path("/tmp/modules"))
-    ['fastqc', 'samtools']"""
+    Example:
+        >>> list_modules(Path("/tmp/modules"))
+        ['fastqc', 'samtools']"""
     ...
 
 def list_submodules(module_id: ModuleId, github_token: str | None = None) -> list[str]:
     """List submodules under a module identifier.
 
-Args:
-    module_id: Module identifier.
-    github_token: Optional GitHub token for authenticated requests.
+    Args:
+        module_id: Module identifier.
+        github_token: Optional GitHub token for authenticated requests.
 
-Returns:
-    Sorted list of submodule identifiers.
+    Returns:
+        Sorted list of submodule identifiers.
 
-Example:
-    >>> list_submodules("samtools")
-    ['view', 'sort']"""
+    Example:
+        >>> list_submodules("samtools")
+        ['view', 'sort']"""
     ...
 
 def inspect_module(
@@ -86,17 +91,17 @@ def inspect_module(
 ) -> dict:
     """Inspect module metadata and previews.
 
-Args:
-    module_id: Module identifier.
-    cache_dir: Cache directory for module artifacts.
-    github_token: Optional GitHub token for authenticated requests.
+    Args:
+        module_id: Module identifier.
+        cache_dir: Cache directory for module artifacts.
+        github_token: Optional GitHub token for authenticated requests.
 
-Returns:
-    Dictionary describing the module files and metadata.
+    Returns:
+        Dictionary describing the module files and metadata.
 
-Example:
-    >>> inspect_module("fastqc")
-    {'name': 'fastqc', 'meta': {...}, ...}"""
+    Example:
+        >>> inspect_module("fastqc")
+        {'name': 'fastqc', 'meta': {...}, ...}"""
     ...
 
 def get_module_inputs(
@@ -106,47 +111,46 @@ def get_module_inputs(
 ) -> list[dict]:
     """Return module input definitions via native introspection.
 
-Args:
-    module_id: Module identifier.
-    cache_dir: Cache directory for module artifacts.
-    github_token: Optional GitHub token for authenticated requests.
+    Args:
+        module_id: Module identifier.
+        cache_dir: Cache directory for module artifacts.
+        github_token: Optional GitHub token for authenticated requests.
 
-Returns:
-    List of input channel definitions.
+    Returns:
+        List of input channel definitions.
 
-Example:
-    >>> get_module_inputs("fastqc")
-    [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}, ...]"""
+    Example:
+        >>> get_module_inputs("fastqc")
+        [{'type': 'tuple', 'params': [{'type': 'val', 'name': 'meta'}]}, ...]"""
     ...
 
 def get_rate_limit_status(github_token: str | None = None) -> dict:
     """Return GitHub API rate limit status.
 
-Args:
-    github_token: Optional GitHub token for authenticated requests.
+    Args:
+        github_token: Optional GitHub token for authenticated requests.
 
-Returns:
-    Mapping describing GitHub API rate limit state.
+    Returns:
+        Mapping describing GitHub API rate limit state.
 
-Example:
-    >>> get_rate_limit_status()
-    {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}"""
+    Example:
+        >>> get_rate_limit_status()
+        {'limit': 60, 'remaining': 59, 'reset_time': 1700000000}"""
     ...
 
 def read_output_file(path: Path) -> str | None:
     """Read an output file's contents.
 
-Args:
-    path: Path to the output file.
+    Args:
+        path: Path to the output file.
 
-Returns:
-    File contents.
+    Returns:
+        File contents.
 
-Raises:
-    OSError: If the file cannot be read.
+    Raises:
+        OSError: If the file cannot be read.
 
-Example:
-    >>> read_output_file(Path("work/output.txt"))
-    '...later output...'"""
+    Example:
+        >>> read_output_file(Path("work/output.txt"))
+        '...later output...'"""
     ...
-

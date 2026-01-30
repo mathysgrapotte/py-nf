@@ -9,26 +9,39 @@ The goal is to keep the public runtime surface small and easy to reason about.""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable, Iterator, Sequence
 
 def to_python(value: Any) -> Any:
     """Convert a Java/JPype object into JSON-ish Python values.
 
-This is used for turning Nextflow workflow outputs into plain values.
+    This is used for turning Nextflow workflow outputs into plain values.
 
-Args:
-    value: Java or Python value.
+    Args:
+        value: Java or Python value.
 
-Returns:
-    A Python-serializable value (or string fallback)."""
+    Returns:
+        A Python-serializable value (or string fallback)."""
     ...
 
 class NextflowResult:
     """A stable, event-based result for a single Nextflow execution.
 
-This object intentionally avoids holding on to live JVM objects. All the data
-it exposes is captured (snapshotted) during execution."""
+    This object intentionally avoids holding on to live JVM objects. All the data
+    it exposes is captured (snapshotted) during execution."""
+
     ...
+
+class SeqeraResult:
+    """Result summary for a remote Seqera Platform execution.
+
+    This object exposes a minimal, stable surface for remote runs."""
+
+    @property
+    def workflow_id(self) -> str: ...
+    @property
+    def url(self) -> str | None: ...
+    def get_execution_report(self) -> dict[str, Any]: ...
+    def get_output_files(self) -> list[str]: ...
 
 def flatten_paths(value: Any) -> Iterator[str]:
     """Yield normalized filesystem paths from nested Java/Python structures."""
@@ -44,6 +57,6 @@ def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
     """Collect visible files from task work directories."""
     ...
 
-def extend_unique(result_list: list[str], seen: set[str], values: Iterable[str]) -> None:
-    ...
-
+def extend_unique(
+    result_list: list[str], seen: set[str], values: Iterable[str]
+) -> None: ...

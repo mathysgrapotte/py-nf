@@ -13,7 +13,11 @@ Public entry point:
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterator
+
+from .result import NextflowResult
+from .types import ExecutionRequest
 
 def resolve_nextflow_jar_path(explicit_path: str | None) -> Path:
     """Resolve the Nextflow fat JAR path."""
@@ -41,9 +45,12 @@ def to_java(value: Any, *, param_type: str | None = None) -> Any:
 
 class WorkflowOutputCollector:
     """Collect workflow outputs, file publish events, and task workdirs."""
+
     ...
 
-def get_process_inputs(script_loader: Any, script: Any, script_meta_cls: Any) -> list[dict]:
+def get_process_inputs(
+    script_loader: Any, script: Any, script_meta_cls: Any
+) -> list[dict]:
     """Extract process inputs using Nextflow's native metadata API."""
     ...
 
@@ -55,7 +62,14 @@ def registered_trace_observer(session: Any, observer_proxy: Any) -> Iterator[Non
     """Register a TraceObserverV2 instance on a session (best-effort removal)."""
     ...
 
-def execute_nextflow(request: ExecutionRequest, nextflow_jar_path: str | None = None) -> NextflowResult:
+def execute_nextflow(
+    request: ExecutionRequest, nextflow_jar_path: str | None = None
+) -> NextflowResult:
     """Execute a Nextflow script and capture structured runtime outputs."""
     ...
 
+def execute_request(
+    request: ExecutionRequest, nextflow_jar_path: str | None = None
+) -> Any:
+    """Dispatch execution to local or remote backend."""
+    ...

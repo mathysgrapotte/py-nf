@@ -17,24 +17,27 @@ The optional ``nf-core/`` prefix is accepted and ignored at the boundary."""
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Sequence
+
+from .types import ExecutionRequest, ModuleId, ModulePaths
 
 def normalize_module_id(module_id: str) -> ModuleId:
     """Normalize a user-provided module id into the canonical form.
 
-Canonical form:
-- no ``nf-core/`` prefix
-- no leading/trailing slashes
+    Canonical form:
+    - no ``nf-core/`` prefix
+    - no leading/trailing slashes
 
-Args:
-    module_id: Module identifier supplied by the user.
+    Args:
+        module_id: Module identifier supplied by the user.
 
-Returns:
-    Canonical module id.
+    Returns:
+        Canonical module id.
 
-Example:
-    >>> normalize_module_id("nf-core/samtools/view")
-    'samtools/view'"""
+    Example:
+        >>> normalize_module_id("nf-core/samtools/view")
+        'samtools/view'"""
     ...
 
 def ensure_cache_dir(cache_dir: Path) -> Path:
@@ -78,21 +81,25 @@ def ensure_module(
 ) -> ModulePaths:
     """Ensure an nf-core module is cached locally.
 
-Args:
-    cache_dir: Directory for cached module artifacts.
-    module_id: Module identifier (canonical form: ``fastqc`` or ``samtools/view``).
-    github_token: Optional GitHub token for authenticated requests.
-    force: When ``True``, re-download even if cached.
+    Args:
+        cache_dir: Directory for cached module artifacts.
+        module_id: Module identifier (canonical form: ``fastqc`` or ``samtools/view``).
+        github_token: Optional GitHub token for authenticated requests.
+        force: When ``True``, re-download even if cached.
 
-Returns:
-    ``ModulePaths`` describing cached module files."""
+    Returns:
+        ``ModulePaths`` describing cached module files."""
     ...
 
-def inspect_module(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> dict:
+def inspect_module(
+    cache_dir: Path, module_id: ModuleId, github_token: str | None
+) -> dict:
     """Inspect module metadata and return a structured summary."""
     ...
 
-def get_module_inputs(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> list[dict]:
+def get_module_inputs(
+    cache_dir: Path, module_id: ModuleId, github_token: str | None
+) -> list[dict]:
     """Return module input definitions via Nextflow introspection."""
     ...
 
@@ -104,6 +111,5 @@ def run_nfcore_module(
     *,
     force_download: bool = False,
 ) -> Any:
-    """Ensure a module is cached and execute it with Nextflow."""
+    """Ensure a module is cached and execute it locally or remotely."""
     ...
-

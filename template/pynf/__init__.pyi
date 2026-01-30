@@ -9,7 +9,12 @@ Design principle:
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping
+
+from . import api
+from ._core.result import NextflowResult, SeqeraResult
+from ._core.types import DockerConfig, ExecutionRequest, SeqeraConfig
 
 def run_script(
     nf_file: str | Path,
@@ -18,21 +23,21 @@ def run_script(
     executor: str = "local",
     docker_config: Mapping[str, Any] | DockerConfig | None = None,
     verbose: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Execute an arbitrary Nextflow script.
 
-This is a convenience wrapper around :func:`pynf.api.run_script`.
+    This is a convenience wrapper around :func:`pynf.api.run_script`.
 
-Args:
-    nf_file: Path to a Nextflow script.
-    inputs: Optional list of input-group mappings.
-    params: Optional mapping of script parameters.
-    executor: Nextflow executor name.
-    docker_config: Optional Docker configuration mapping or dataclass.
-    verbose: Enable verbose debug output.
+    Args:
+        nf_file: Path to a Nextflow script.
+        inputs: Optional list of input-group mappings.
+        params: Optional mapping of script parameters.
+        executor: Nextflow executor name.
+        docker_config: Optional Docker configuration mapping or dataclass.
+        verbose: Enable verbose debug output.
 
-Returns:
-    ``NextflowResult``."""
+    Returns:
+        ``NextflowResult``."""
     ...
 
 def run_module(
@@ -42,10 +47,10 @@ def run_module(
     executor: str = "local",
     docker_config: Mapping[str, Any] | DockerConfig | None = None,
     verbose: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Alias for :func:`run_script`.
 
-Kept for users who prefer the "run a module" naming even for raw scripts."""
+    Kept for users who prefer the "run a module" naming even for raw scripts."""
     ...
 
 def run_nfcore_module(
@@ -54,21 +59,20 @@ def run_nfcore_module(
     cache_dir: Path = api.DEFAULT_CACHE_DIR,
     github_token: str | None = None,
     force_download: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Download (if needed) and run an nf-core module.
 
-Args:
-    module_id: Module id (canonical form is without the ``nf-core/`` prefix).
-    request: Execution request describing inputs and execution options.
-    cache_dir: Directory for cached module artifacts.
-    github_token: Optional GitHub token for authenticated requests.
-    force_download: When ``True``, re-download the module.
+    Args:
+        module_id: Module id (canonical form is without the ``nf-core/`` prefix).
+        request: Execution request describing inputs and execution options.
+        cache_dir: Directory for cached module artifacts.
+        github_token: Optional GitHub token for authenticated requests.
+        force_download: When ``True``, re-download the module.
 
-Returns:
-    ``NextflowResult``."""
+    Returns:
+        ``NextflowResult``."""
     ...
 
-def read_output_file(file_path: str | Path) -> str:
+def read_output_file(file_path: str | Path) -> str | None:
     """Read contents of an output file."""
     ...
-
