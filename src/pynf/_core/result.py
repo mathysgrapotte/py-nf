@@ -128,6 +128,51 @@ class NextflowResult:
         return list(self._task_workdirs)
 
 
+class SeqeraResult:
+    """Result summary for a remote Seqera Platform execution.
+
+    This object exposes a minimal, stable surface for remote runs.
+    """
+
+    def __init__(
+        self,
+        *,
+        workflow_id: str,
+        status: str,
+        execution_report: dict[str, Any] | None = None,
+        outdir: str | None = None,
+        url: str | None = None,
+    ) -> None:
+        self._workflow_id = workflow_id
+        self._status = status
+        self._execution_report = execution_report or {}
+        self._outdir = outdir
+        self._url = url
+
+    @property
+    def workflow_id(self) -> str:
+        return self._workflow_id
+
+    @property
+    def url(self) -> str | None:
+        return self._url
+
+    def get_execution_report(self) -> dict[str, Any]:
+        report = dict(self._execution_report)
+        report.setdefault("workflow_id", self._workflow_id)
+        report.setdefault("status", self._status)
+        if self._url:
+            report.setdefault("url", self._url)
+        if self._outdir:
+            report.setdefault("outdir", self._outdir)
+        return report
+
+    def get_output_files(self) -> list[str]:
+        if not self._outdir:
+            return []
+        return [self._outdir]
+
+
 def flatten_paths(value: Any) -> Iterator[str]:
     """Yield normalized filesystem paths from nested Java/Python structures."""
 
@@ -226,7 +271,9 @@ def collect_paths_from_workdirs(task_workdirs: Sequence[str]) -> list[str]:
     return outputs
 
 
-def extend_unique(result_list: list[str], seen: set[str], values: Iterable[str]) -> None:
+def extend_unique(
+    result_list: list[str], seen: set[str], values: Iterable[str]
+) -> None:
     for value in values:
         if value in seen:
             continue

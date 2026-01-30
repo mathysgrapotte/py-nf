@@ -15,14 +15,16 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import api
-from ._core.result import NextflowResult
-from ._core.types import DockerConfig, ExecutionRequest
+from ._core.result import NextflowResult, SeqeraResult
+from ._core.types import DockerConfig, ExecutionRequest, SeqeraConfig
 from ._core.validation import validate_meta_map
 
 __all__ = [
     "NextflowResult",
+    "SeqeraResult",
     "DockerConfig",
     "ExecutionRequest",
+    "SeqeraConfig",
     "validate_meta_map",
     # Public functional API
     "run_script",
@@ -39,7 +41,7 @@ def run_script(
     executor: str = "local",
     docker_config: Mapping[str, Any] | DockerConfig | None = None,
     verbose: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Execute an arbitrary Nextflow script.
 
     This is a convenience wrapper around :func:`pynf.api.run_script`.
@@ -53,7 +55,7 @@ def run_script(
         verbose: Enable verbose debug output.
 
     Returns:
-        ``NextflowResult``.
+        ``NextflowResult`` or ``SeqeraResult``.
     """
     request = ExecutionRequest(
         script_path=Path(nf_file),
@@ -73,7 +75,7 @@ def run_module(
     executor: str = "local",
     docker_config: Mapping[str, Any] | DockerConfig | None = None,
     verbose: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Alias for :func:`run_script`.
 
     Kept for users who prefer the "run a module" naming even for raw scripts.
@@ -94,7 +96,7 @@ def run_nfcore_module(
     cache_dir: Path = api.DEFAULT_CACHE_DIR,
     github_token: str | None = None,
     force_download: bool = False,
-) -> NextflowResult:
+) -> NextflowResult | SeqeraResult:
     """Download (if needed) and run an nf-core module.
 
     Args:
@@ -105,7 +107,7 @@ def run_nfcore_module(
         force_download: When ``True``, re-download the module.
 
     Returns:
-        ``NextflowResult``.
+        ``NextflowResult`` or ``SeqeraResult``.
     """
     return api.run_module(
         module_id,
@@ -116,7 +118,7 @@ def run_nfcore_module(
     )
 
 
-def read_output_file(file_path: str | Path) -> str:
+def read_output_file(file_path: str | Path) -> str | None:
     """Read contents of an output file."""
     return api.read_output_file(Path(file_path))
 

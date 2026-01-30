@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 ModuleId = str
 ParamName = str
 ParamType = str
+ExecutionBackend = Literal["local", "seqera"]
 
 ParamValue = Any
 ParamsMap = Mapping[str, Any]
@@ -104,6 +105,31 @@ class DockerConfig:
 
 
 @dataclass(frozen=True)
+class SeqeraConfig:
+    """Seqera Platform configuration for remote execution.
+
+    Attributes:
+        access_token: Seqera Platform access token. If omitted, read ``TOWER_ACCESS_TOKEN``.
+        api_endpoint: Base API endpoint (defaults to ``https://api.cloud.seqera.io``).
+        workspace_id: Workspace numeric identifier.
+        compute_env_id: Compute environment identifier.
+        work_dir: Optional work directory for the run (e.g. ``s3://bucket/work``).
+        run_name: Optional run name for the workflow.
+
+    Example:
+        >>> SeqeraConfig(workspace_id=1, compute_env_id="abc123")
+        SeqeraConfig(workspace_id=1, compute_env_id='abc123')
+    """
+
+    access_token: str | None = None
+    api_endpoint: str = "https://api.cloud.seqera.io"
+    workspace_id: int | None = None
+    compute_env_id: str | None = None
+    work_dir: str | None = None
+    run_name: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionRequest:
     """Immutable request describing a Nextflow execution.
 
@@ -114,6 +140,8 @@ class ExecutionRequest:
         inputs: Optional list of input group mappings that are validated against the script metadata.
         docker: Docker execution configuration, when enabled.
         verbose: Whether to enable verbose logging and diagnostic output.
+        backend: Execution backend identifier (``local`` or ``seqera``).
+        seqera: Seqera Platform configuration when ``backend='seqera'``.
 
     Example:
         >>> ExecutionRequest(
@@ -131,3 +159,5 @@ class ExecutionRequest:
     inputs: InputGroups | None = None
     docker: DockerConfig | None = None
     verbose: bool = False
+    backend: ExecutionBackend = "local"
+    seqera: SeqeraConfig | None = None

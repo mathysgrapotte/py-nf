@@ -34,6 +34,7 @@ from .execution import (
     resolve_nextflow_jar_path,
     start_jvm_if_needed,
 )
+from .seqera_execution import execute_seqera_module
 
 API_BASE = "https://api.github.com/repos/nf-core/modules/contents/modules/nf-core"
 RAW_BASE = "https://raw.githubusercontent.com/nf-core/modules/master/modules/nf-core"
@@ -151,7 +152,9 @@ def ensure_module(
     return paths
 
 
-def inspect_module(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> dict:
+def inspect_module(
+    cache_dir: Path, module_id: ModuleId, github_token: str | None
+) -> dict:
     """Inspect module metadata and return a structured summary."""
     paths = ensure_module(cache_dir, module_id, github_token)
     meta = _read_yaml(paths.meta_yml)
@@ -168,7 +171,9 @@ def inspect_module(cache_dir: Path, module_id: ModuleId, github_token: str | Non
     }
 
 
-def get_module_inputs(cache_dir: Path, module_id: ModuleId, github_token: str | None) -> list[dict]:
+def get_module_inputs(
+    cache_dir: Path, module_id: ModuleId, github_token: str | None
+) -> list[dict]:
     """Return module input definitions via Nextflow introspection."""
     paths = ensure_module(cache_dir, module_id, github_token)
 
@@ -207,8 +212,10 @@ def run_nfcore_module(
     *,
     force_download: bool = False,
 ) -> Any:
-    """Ensure a module is cached and execute it with Nextflow."""
+    """Ensure a module is cached and execute it locally or remotely."""
     paths = ensure_module(cache_dir, module_id, github_token, force=force_download)
+    if request.backend == "seqera":
+        return execute_seqera_module(request, paths)
     module_request = ExecutionRequest(
         script_path=paths.main_nf,
         executor=request.executor,
@@ -216,6 +223,8 @@ def run_nfcore_module(
         inputs=request.inputs,
         docker=request.docker,
         verbose=request.verbose,
+        backend=request.backend,
+        seqera=request.seqera,
     )
     return execute_nextflow(module_request)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ._core.execution import execute_nextflow
+from ._core.execution import execute_request
 from ._core.nfcore_modules import get_rate_limit_status as _get_rate_limit_status
 from ._core.nfcore_modules import list_modules as _list_modules
 from ._core.nfcore_modules import list_submodules as _list_submodules
@@ -25,14 +25,14 @@ def run_script(request: ExecutionRequest, nextflow_jar_path: str | None = None) 
         nextflow_jar_path: Optional override for the Nextflow JAR path.
 
     Returns:
-        Execution result object (currently ``NextflowResult``).
+        Execution result object (``NextflowResult`` or ``SeqeraResult``).
 
     Example:
         >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")
         >>> run_script(request)
         NextflowResult(...)
     """
-    return execute_nextflow(request, nextflow_jar_path=nextflow_jar_path)
+    return execute_request(request, nextflow_jar_path=nextflow_jar_path)
 
 
 def run_module(
@@ -54,7 +54,7 @@ def run_module(
         force_download: When ``True``, re-download the module.
 
     Returns:
-        Execution result object (currently ``NextflowResult``).
+        Execution result object (``NextflowResult`` or ``SeqeraResult``).
 
     Example:
         >>> request = ExecutionRequest(script_path=Path("main.nf"), executor="local")

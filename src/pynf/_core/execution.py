@@ -24,6 +24,7 @@ from typing import Any, Iterator
 import jpype
 
 from .types import DockerConfig, ExecutionRequest
+from .seqera_execution import execute_seqera_script
 from .validation import validate_inputs
 from .result import NextflowResult
 
@@ -158,6 +159,7 @@ class WorkflowOutputCollector:
     def __getattr__(self, name: str):
         # Nextflow TraceObserverV2 has many callback methods; we only care about a few.
         if name.startswith("on"):
+
             def _noop(*args: Any, **kwargs: Any) -> None:
                 return None
 
@@ -182,7 +184,9 @@ class WorkflowOutputCollector:
             return
 
 
-def get_process_inputs(script_loader: Any, script: Any, script_meta_cls: Any) -> list[dict]:
+def get_process_inputs(
+    script_loader: Any, script: Any, script_meta_cls: Any
+) -> list[dict]:
     """Extract process inputs using Nextflow's native metadata API."""
     script_loader.setModule(True)
 
@@ -272,7 +276,9 @@ def registered_trace_observer(session: Any, observer_proxy: Any) -> Iterator[Non
             pass
 
 
-def execute_nextflow(request: ExecutionRequest, nextflow_jar_path: str | None = None) -> NextflowResult:
+def execute_nextflow(
+    request: ExecutionRequest, nextflow_jar_path: str | None = None
+) -> NextflowResult:
     """Execute a Nextflow script and capture structured runtime outputs."""
     jar_path = resolve_nextflow_jar_path(nextflow_jar_path)
     assert_nextflow_jar_exists(jar_path)
@@ -329,6 +335,15 @@ def execute_nextflow(request: ExecutionRequest, nextflow_jar_path: str | None = 
         execution_report=report,
         work_dir=work_dir,
     )
+
+
+def execute_request(
+    request: ExecutionRequest, nextflow_jar_path: str | None = None
+) -> Any:
+    """Dispatch execution to local or remote backend."""
+    if request.backend == "seqera":
+        return execute_seqera_script(request)
+    return execute_nextflow(request, nextflow_jar_path=nextflow_jar_path)
 
 
 def _configure_docker(session: Any, docker_config: DockerConfig) -> None:
