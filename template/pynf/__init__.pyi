@@ -5,11 +5,27 @@ This package is intentionally **functional-first**: most users should only need
 
 Design principle:
 - Keep the public surface small and easy to discover.
-- Hide implementation details behind ``pynf.api``."""
+- Hide implementation details behind ``pynf.api``.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any, NamedTuple
+
+from . import api
+from ._core.result import NextflowResult
+from ._core.types import DockerConfig, ExecutionRequest
+from ._core.validation import validate_meta_map
+
+
+class ModuleResult(NamedTuple):
+    output_files: list[str]
+    workflow_outputs: list[dict[str, Any]]
+    report: dict[str, Any]
+    raw: NextflowResult
+
 
 def run_script(
     nf_file: str | Path,
@@ -19,34 +35,25 @@ def run_script(
     docker_config: Mapping[str, Any] | DockerConfig | None = None,
     verbose: bool = False,
 ) -> NextflowResult:
-    """Execute an arbitrary Nextflow script.
-
-This is a convenience wrapper around :func:`pynf.api.run_script`.
-
-Args:
-    nf_file: Path to a Nextflow script.
-    inputs: Optional list of input-group mappings.
-    params: Optional mapping of script parameters.
-    executor: Nextflow executor name.
-    docker_config: Optional Docker configuration mapping or dataclass.
-    verbose: Enable verbose debug output.
-
-Returns:
-    ``NextflowResult``."""
+    """Execute an arbitrary Nextflow script."""
     ...
+
 
 def run_module(
-    nf_file: str | Path,
-    inputs=None,
-    params=None,
+    module_id: str,
+    *,
     executor: str = "local",
-    docker_config: Mapping[str, Any] | DockerConfig | None = None,
+    docker: bool = False,
+    cache_dir: Path = api.DEFAULT_CACHE_DIR,
+    github_token: str | None = None,
+    params: dict[str, Any] | None = None,
     verbose: bool = False,
-) -> NextflowResult:
-    """Alias for :func:`run_script`.
-
-Kept for users who prefer the "run a module" naming even for raw scripts."""
+    force_download: bool = False,
+    **inputs: Any,
+) -> ModuleResult:
+    """Run an nf-core module using a keyword-argument (pythonic) calling style."""
     ...
+
 
 def run_nfcore_module(
     module_id: str,
@@ -55,20 +62,10 @@ def run_nfcore_module(
     github_token: str | None = None,
     force_download: bool = False,
 ) -> NextflowResult:
-    """Download (if needed) and run an nf-core module.
-
-Args:
-    module_id: Module id (canonical form is without the ``nf-core/`` prefix).
-    request: Execution request describing inputs and execution options.
-    cache_dir: Directory for cached module artifacts.
-    github_token: Optional GitHub token for authenticated requests.
-    force_download: When ``True``, re-download the module.
-
-Returns:
-    ``NextflowResult``."""
+    """Download (if needed) and run an nf-core module."""
     ...
+
 
 def read_output_file(file_path: str | Path) -> str:
     """Read contents of an output file."""
     ...
-
