@@ -8,7 +8,7 @@ Run Nextflow modules directly from Python while keeping access to the full set o
 2. **CLI Tools** - Command-line interface for managing and running nf-core modules
 
 ```python
-from pynf import run_module; run_module("nextflow_scripts/file-output-process.nf")
+from pynf import run_script; run_script("nextflow_scripts/file-output-process.nf")
 ```
 
 Behind that one-liner the library:
@@ -113,7 +113,7 @@ print("Files published:", result.get_output_files())
 print("Structured workflow outputs:", result.get_workflow_outputs())
 
 # Option 2 — convenience helper
-result = run_module("nextflow_scripts/file-output-process.nf")
+result = run_script("nextflow_scripts/file-output-process.nf")
 assert any(Path(p).name == "output.txt" for p in result.get_output_files())
 ```
 
@@ -257,7 +257,7 @@ Returned by `pynf.execution.execute_nextflow`. Important accessors:
 
 ### Convenience helpers
 
-`pynf.run_module(path, input_files=None, params=None, executor="local")` wraps the two-step load/execute call into a single function. It always returns a `NextflowResult` and is designed for the common case where you only need one module run.
+`pynf.run_script(path, inputs=None, params=None, executor="local")` is a small convenience wrapper for running an arbitrary `.nf` script. It returns a `NextflowResult`.
 
 ## Output collection details
 
