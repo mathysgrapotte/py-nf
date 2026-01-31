@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
 from . import api
 from ._core.result import NextflowResult
@@ -29,6 +29,7 @@ __all__ = [
     "run_module",
     "run_nfcore_module",
     "read_output_file",
+    "ModuleResult",
 ]
 
 
@@ -66,25 +67,94 @@ def run_script(
     return api.run_script(request)
 
 
-def run_module(
-    nf_file: str | Path,
-    inputs=None,
-    params=None,
-    executor: str = "local",
-    docker_config: Mapping[str, Any] | DockerConfig | None = None,
-    verbose: bool = False,
-) -> NextflowResult:
-    """Alias for :func:`run_script`.
+class ModuleResult(NamedTuple):
+    """Pythonic tuple-like result for a module run.
 
-    Kept for users who prefer the "run a module" naming even for raw scripts.
+    This is a convenience wrapper around :class:`~pynf._core.result.NextflowResult`.
+
+    Attributes:
+        output_files: Output file paths discovered from Nextflow events/workdirs.
+        workflow_outputs: Workflow outputs converted to JSON-ish Python values.
+        report: Execution statistics snapshot.
+        raw: The underlying `NextflowResult`.
+
+    Example:
+        >>> result = run_module("fastqc", reads=["R1.fq"], meta={"id": "s1"})
+        >>> output_files, workflow_outputs, report, raw = result
     """
-    return run_script(
-        nf_file,
-        inputs=inputs,
-        params=params,
+
+    output_files: list[str]
+    workflow_outputs: list[dict[str, Any]]
+    report: dict[str, Any]
+    raw: NextflowResult
+
+
+def run_module(
+    module_id: str,
+    *,
+    executor: str = "local",
+    docker: bool = False,
+    cache_dir: Path = api.DEFAULT_CACHE_DIR,
+    github_token: str | None = None,
+    params: dict[str, Any] | None = None,
+    verbose: bool = False,
+    force_download: bool = False,
+    **inputs: Any,
+) -> ModuleResult:
+    """Run an nf-core module using a keyword-argument (pythonic) calling style.
+
+    This function introspects the module's Nextflow input channels and attempts
+    to map ``**inputs`` onto those channels.
+
+    Rules:
+    - Unknown keyword names are an error.
+    - If a keyword could map to multiple channels, we raise an error instead of guessing.
+
+    Args:
+        module_id: Module identifier (canonical: without the ``nf-core/`` prefix).
+        executor: Nextflow executor name.
+        docker: When ``True``, enables Docker with a default registry.
+        cache_dir: Directory for cached module artifacts.
+        github_token: Optional GitHub token.
+        params: Nextflow params mapping.
+        verbose: Enable verbose debug output.
+        force_download: Re-download the module if already cached.
+        **inputs: Module input values (keyword args).
+
+    Returns:
+        A tuple-like :class:`ModuleResult`.
+    """
+    from ._core.pythonic_api import auto_group_inputs
+
+    input_channels = api.get_module_inputs(
+        module_id, cache_dir=cache_dir, github_token=github_token
+    )
+    grouped_inputs = auto_group_inputs(input_channels=input_channels, kwargs=dict(inputs))
+
+    docker_config = DockerConfig(enabled=True, registry="quay.io") if docker else None
+
+    request = ExecutionRequest(
+        script_path=Path("."),
         executor=executor,
-        docker_config=docker_config,
+        params=params,
+        inputs=grouped_inputs,
+        docker=docker_config,
         verbose=verbose,
+    )
+
+    raw = run_nfcore_module(
+        module_id,
+        request,
+        cache_dir=cache_dir,
+        github_token=github_token,
+        force_download=force_download,
+    )
+
+    return ModuleResult(
+        output_files=raw.get_output_files(),
+        workflow_outputs=raw.get_workflow_outputs(),
+        report=raw.get_execution_report(),
+        raw=raw,
     )
 
 
